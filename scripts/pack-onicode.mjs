@@ -21,7 +21,7 @@ if (git('status', '--porcelain'))
   throw new Error('Commit source changes before packing the fork.');
 if (!existsSync(path.join(source, 'lib/module/index.js')))
   throw new Error('Run yarn prepare before packing.');
-const staging = mkdtempSync(path.join(tmpdir(), 'enriched-t3-pack-'));
+const staging = mkdtempSync(path.join(tmpdir(), 'enriched-onicode-pack-'));
 try {
   const skip = new Set([
     'build',
@@ -88,10 +88,10 @@ try {
     JSON.stringify(pkg, null, 2) + '\n'
   );
   writeFileSync(
-    path.join(staging, 't3-fork.json'),
+    path.join(staging, 'oni-fork.json'),
     JSON.stringify(
       {
-        repository: 'https://github.com/pingdotgg/enriched-markdown',
+        repository: 'https://github.com/aislopware/enriched-markdown',
         commit: git('rev-parse', 'HEAD'),
         upstreamCommit: '1d00a92abc3f7cf953946cf42f999523dec699dc',
         version: pkg.version,

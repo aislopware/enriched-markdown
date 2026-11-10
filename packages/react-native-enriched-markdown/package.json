@@ -1,6 +1,6 @@
 {
   "name": "react-native-enriched-markdown",
-  "version": "1.2.0-t3.18",
+  "version": "1.2.0-oni.18",
   "description": "Markdown-based Rich Text solution for React Native",
   "main": "./lib/module/index",
   "module": "./lib/module/index",
@@ -39,7 +39,7 @@
     "!**/.*",
     "!cpp/tests",
     "docs",
-    "t3-fork.json"
+    "oni-fork.json"
   ],
   "scripts": {
     "postinstall": "node postinstall.mjs",
@@ -59,7 +59,7 @@
     "prepack": "bash ../../scripts/prepare-npm-publish.sh prepack",
     "postpack": "bash ../../scripts/prepare-npm-publish.sh postpack",
     "prepare": "yarn vendor-grammars && yarn vendor-ratex && bob build",
-    "pack:t3": "node ../../scripts/pack-t3.mjs"
+    "pack:onicode": "node ../../scripts/pack-onicode.mjs"
   },
   "keywords": [
     "react-native",

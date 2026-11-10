@@ -1,4 +1,4 @@
-Saved to C:\Users\me\.t3\_build\shot.png and C:/work\.config and C:\folder\(draft.
+Saved to C:\Users\me\.onicode\_build\shot.png and C:/work\.config and C:\folder\(draft.
 
 A drive alone keeps it too: D:\.hidden
 
