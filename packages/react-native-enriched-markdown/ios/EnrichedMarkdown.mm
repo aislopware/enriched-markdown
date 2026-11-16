@@ -102,6 +102,7 @@ static char kENRMSegmentFadeAnimatorKey;
                     selectedText:(NSString *)selectedText
                   selectionStart:(NSUInteger)selectionStart
                     selectionEnd:(NSUInteger)selectionEnd;
+- (ENRMSelectionCopyHandler)selectionCopyHandler;
 @end
 
 #if !TARGET_OS_OSX
@@ -411,7 +412,8 @@ static char kENRMSegmentFadeAnimatorKey;
                           }
                           updateView:^(RCTUIView *view, ENRMRenderedSegment *segment) {
                             [(ENRMBlockquoteContainerView *)view
-                                applyBlockquoteNode:segment.blockquoteSegment.blockquoteNode];
+                                applyBlockquoteNode:segment.blockquoteSegment.blockquoteNode
+                                    taskIndexOffset:segment.blockquoteSegment.taskIndexOffset];
                           }]];
 
   [handlers addObject:[ENRMSegmentViewHandler handlerWithKind:ENRMSegmentKindBlockSlot
@@ -473,6 +475,7 @@ static char kENRMSegmentFadeAnimatorKey;
   view.lineBreakStrategy = _lineBreakStrategy;
   view.dynamicProps = _dynamicBlockProps;
   view.accessibilityLabels = _accessibilityLabels;
+  view.onSelectionCopy = [self selectionCopyHandler];
 
   __weak EnrichedMarkdown *weakSelf = self;
   view.onCopyPress = ^(NSString *code, NSString *language) {
@@ -507,7 +510,7 @@ static char kENRMSegmentFadeAnimatorKey;
       [strongSelf emitTextPress:index text:text];
   };
 
-  [view applyBlockquoteNode:blockquoteSegment.blockquoteNode];
+  [view applyBlockquoteNode:blockquoteSegment.blockquoteNode taskIndexOffset:blockquoteSegment.taskIndexOffset];
   return view;
 }
 
@@ -1037,7 +1040,7 @@ static char kENRMSegmentFadeAnimatorKey;
 
     renderedSegments = ENRMRenderSegmentsFromAST(ast, config, allowTrailingMargin, allowFontScaling,
                                                  maxFontSizeMultiplier, lineBreakStrategy,
-                                                 /*blockquoteContent*/ NO);
+                                                 /*blockquoteContent*/ NO, /*startingTaskIndex*/ 0);
     for (ENRMRenderedSegment *segment in renderedSegments) {
       if (segment.kind == ENRMSegmentKindText && segment.textResult) {
         ENRMApplyWritingDirectionMode(segment.textResult.attributedText, writingDirectionMode, resolvedLayoutDirection);
@@ -1085,9 +1088,9 @@ static char kENRMSegmentFadeAnimatorKey;
     return nil;
   }
 
-  NSArray<ENRMRenderedSegment *> *segments =
-      ENRMRenderSegmentsFromAST(ast, _config, _allowTrailingMargin, _fontScaleObserver.allowFontScaling,
-                                _maxFontSizeMultiplier, _lineBreakStrategy, /*blockquoteContent*/ NO);
+  NSArray<ENRMRenderedSegment *> *segments = ENRMRenderSegmentsFromAST(
+      ast, _config, _allowTrailingMargin, _fontScaleObserver.allowFontScaling, _maxFontSizeMultiplier,
+      _lineBreakStrategy, /*blockquoteContent*/ NO, /*startingTaskIndex*/ 0);
   for (ENRMRenderedSegment *segment in segments) {
     if (segment.kind == ENRMSegmentKindText && segment.textResult) {
       ENRMApplyWritingDirectionMode(segment.textResult.attributedText, _writingDirectionMode, _resolvedLayoutDirection);
@@ -1237,6 +1240,7 @@ static char kENRMSegmentFadeAnimatorKey;
 {
   EnrichedMarkdownInternalText *view = [[EnrichedMarkdownInternalText alloc] initWithConfig:_config];
   [self configureTextView:view withRenderedSegment:segment];
+  view.onSelectionCopy = [self selectionCopyHandler];
 
   ENRMTapRecognizer *tapRecognizer = [[ENRMTapRecognizer alloc] initWithTarget:self action:@selector(textTapped:)];
   [view.textView addGestureRecognizer:tapRecognizer];
@@ -1260,7 +1264,8 @@ static char kENRMSegmentFadeAnimatorKey;
                                   selectionEnd:selectionEnd];
         });
     return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, segmentMarkdown, strongSelf->_config,
-                                     @[ baseMenu ], customItems, strongSelf -> _selectionMenuConfig);
+                                     @[ baseMenu ], customItems, strongSelf -> _selectionMenuConfig,
+                                     [strongSelf selectionCopyHandler]);
   }];
 #endif
 
@@ -1923,6 +1928,24 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
     });
 }
 
+- (ENRMSelectionCopyHandler)selectionCopyHandler
+{
+  __weak EnrichedMarkdown *weakSelf = self;
+  return ^(NSString *text, NSString *format, NSRange range) {
+    EnrichedMarkdown *strongSelf = weakSelf;
+    if (!strongSelf)
+      return;
+    auto emitter = std::static_pointer_cast<EnrichedMarkdownEventEmitter const>(strongSelf->_eventEmitter);
+    if (emitter)
+      emitter->onSelectionCopy({
+          .text = std::string(text.UTF8String ?: ""),
+          .format = std::string(format.UTF8String),
+          .selectionStart = (int)range.location,
+          .selectionEnd = (int)NSMaxRange(range),
+      });
+  };
+}
+
 - (void)updateEventEmitter:(const facebook::react::EventEmitter::Shared &)eventEmitter
 {
   [super updateEventEmitter:eventEmitter];
@@ -1997,7 +2020,7 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
 
   NSString *segmentMarkdown = extractMarkdownFromAttributedString(textView.attributedText, range);
   return buildEditMenuForSelection(textView.attributedText, range, segmentMarkdown, _config, suggestedActions,
-                                   customActions, _selectionMenuConfig);
+                                   customActions, _selectionMenuConfig, [self selectionCopyHandler]);
 }
 
 - (UITextItemMenuConfiguration *)textView:(UITextView *)textView

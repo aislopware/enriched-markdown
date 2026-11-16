@@ -46,6 +46,8 @@ import com.swmansion.enriched.markdown.utils.common.animatorDurationScale
 import com.swmansion.enriched.markdown.utils.common.isReducedMotionEnabled
 import com.swmansion.enriched.markdown.utils.text.TailFadeInAnimator
 import com.swmansion.enriched.markdown.utils.text.view.ImagePressHost
+import com.swmansion.enriched.markdown.utils.text.view.OnSelectionCopy
+import com.swmansion.enriched.markdown.utils.text.view.SelectionCopyFormat
 import com.swmansion.enriched.markdown.utils.text.view.SelectionMenuConfig
 import com.swmansion.enriched.markdown.utils.text.view.TextPressHost
 import com.swmansion.enriched.markdown.utils.text.view.applySelectionColors
@@ -187,6 +189,7 @@ class EnrichedMarkdown(
     }
   private var contextMenuItemTexts: List<String> = emptyList()
   var onContextMenuItemPressCallback: ((itemText: String, selectedText: String, selectionStart: Int, selectionEnd: Int) -> Unit)? = null
+  var onSelectionCopyCallback: OnSelectionCopy? = null
   var spoilerOverlay: SpoilerOverlay = SpoilerOverlay.PARTICLES
     set(value) {
       if (field == value) return
@@ -548,6 +551,15 @@ class EnrichedMarkdown(
     onContextMenuItemPressCallback?.invoke(itemText, selectedText, selectionStart, selectionEnd)
   }
 
+  private fun forwardSelectionCopy(
+    text: String,
+    format: SelectionCopyFormat,
+    selectionStart: Int,
+    selectionEnd: Int,
+  ) {
+    onSelectionCopyCallback?.invoke(text, format, selectionStart, selectionEnd)
+  }
+
   private fun recreateStyleConfig() {
     markdownStyleMap?.let {
       markdownStyle =
@@ -732,6 +744,7 @@ class EnrichedMarkdown(
       onTaskListItemPress = onTaskListItemPressCallback,
       onContextMenuItemPress = ::forwardContextMenuItemPress,
       onLatexError = latexErrorReporter,
+      onSelectionCopy = ::forwardSelectionCopy,
     )
 
   /**
