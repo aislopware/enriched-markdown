@@ -7,6 +7,7 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.common.ReactConstants
 import com.facebook.react.views.text.ReactTypefaceUtils.applyStyles
 import com.facebook.react.views.text.ReactTypefaceUtils.parseFontWeight
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
 
 /**
  * Main style configuration class that parses and caches all markdown element styles.
@@ -180,6 +181,9 @@ class StyleConfig(
 
   /** Per-link pill content keyed by exact URL; content, so it lives outside the style map. */
   var linkPillContent: Map<String, LinkPillContent> = emptyMap()
+
+  /** The `writingDirection` prop, here so nested tables and quotes measure and lay out with it. */
+  var writingDirection: MarkdownWritingDirection = MarkdownWritingDirection.FIRST_STRONG
 
   val videoStyle: VideoStyle by lazy {
     val map =
@@ -364,7 +368,8 @@ class StyleConfig(
       highlightStyle == other.highlightStyle &&
       imageRequestHeaders == other.imageRequestHeaders &&
       imageSourceOverrides == other.imageSourceOverrides &&
-      linkPillContent == other.linkPillContent
+      linkPillContent == other.linkPillContent &&
+      writingDirection == other.writingDirection
   }
 
   override fun hashCode(): Int {
@@ -395,6 +400,7 @@ class StyleConfig(
     result = 31 * result + imageRequestHeaders.hashCode()
     result = 31 * result + imageSourceOverrides.hashCode()
     result = 31 * result + linkPillContent.hashCode()
+    result = 31 * result + writingDirection.hashCode()
     return result
   }
 }

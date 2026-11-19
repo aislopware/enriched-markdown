@@ -3,6 +3,7 @@
 #import "ENRMCodeBlockContainerView.h"
 #import "ENRMContainerNodeView.h"
 #import "EditMenuUtils.h"
+#import "ParagraphStyleUtils.h"
 #import "StyleConfig.h"
 
 @class MarkdownASTNode;
@@ -62,6 +63,8 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
                          pointScaleFactor:(CGFloat)pointScaleFactor
                          allowFontScaling:(BOOL)allowFontScaling
                         lineBreakStrategy:(NSLineBreakStrategy)lineBreakStrategy
+                     writingDirectionMode:(ENRMWritingDirectionMode)writingDirectionMode
+                  resolvedLayoutDirection:(NSWritingDirection)resolvedLayoutDirection
                                wrapCursor:(nullable ENRMCodeBlockWrapCursor *)wrapCursor
                              slotMeasurer:(nullable ENRMBlockSlotMeasurer *)slotMeasurer
                                    origin:(CGPoint)origin;
@@ -71,6 +74,11 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
 // the host (root view or parent quote) at creation; propagated to nested quotes.
 @property (nonatomic, assign) BOOL allowFontScaling;
 @property (nonatomic, assign) NSLineBreakStrategy lineBreakStrategy;
+// The host's writingDirection mode and Yoga-resolved direction, applied to the quote's text and
+// tables as the root applies them to its own. Read when the node is applied; a change recreates
+// the host's segments.
+@property (nonatomic, assign) ENRMWritingDirectionMode writingDirectionMode;
+@property (nonatomic, assign) NSWritingDirection resolvedLayoutDirection;
 
 // YES when this quote is nested directly inside another quote. A nested quote
 // carries no vertical margin (only the outermost quote does, applied by the root

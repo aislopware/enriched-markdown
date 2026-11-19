@@ -46,6 +46,8 @@ import com.swmansion.enriched.markdown.utils.common.getBooleanOrDefault
 import com.swmansion.enriched.markdown.utils.common.getIntOrDefault
 import com.swmansion.enriched.markdown.utils.common.getMapOrNull
 import com.swmansion.enriched.markdown.utils.common.getStringOrDefault
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
+import com.swmansion.enriched.markdown.utils.common.layout.setWritingDirection
 import com.swmansion.enriched.markdown.utils.common.parseImageRequestHeaders
 import com.swmansion.enriched.markdown.utils.common.parseImageSources
 import com.swmansion.enriched.markdown.utils.common.parseLinkPillContent
@@ -92,6 +94,8 @@ object MeasurementStore {
   private val numberOfLinesByViewId = ConcurrentHashMap<Int, Int>()
 
   private val ellipsizeModeByViewId = ConcurrentHashMap<Int, String>()
+
+  private val writingDirectionByViewId = ConcurrentHashMap<Int, MarkdownWritingDirection>()
 
   // Code blocks the user wrapped, by document-order index across nesting (see CodeBlockWrapState).
   private val wrappedCodeBlocks = ConcurrentHashMap<Int, Set<Int>>()
@@ -175,6 +179,7 @@ object MeasurementStore {
     data.remove(id)
     numberOfLinesByViewId.remove(id)
     ellipsizeModeByViewId.remove(id)
+    writingDirectionByViewId.remove(id)
     wrappedCodeBlocks.remove(id)
   }
 
@@ -225,6 +230,9 @@ object MeasurementStore {
       }
       if (props.hasKey("ellipsizeMode")) {
         ellipsizeModeByViewId[id] = props.getString("ellipsizeMode") ?: EllipsizeUtils.DEFAULT_MODE
+      }
+      if (props.hasKey("writingDirection")) {
+        writingDirectionByViewId[id] = MarkdownWritingDirection.fromProp(props.getString("writingDirection"))
       }
     }
 
@@ -292,6 +300,9 @@ object MeasurementStore {
   ) {
     ellipsizeModeByViewId[viewId] = mode
   }
+
+  private fun resolveWritingDirection(viewId: Int?): MarkdownWritingDirection =
+    viewId?.let { writingDirectionByViewId[it] } ?: MarkdownWritingDirection.FIRST_STRONG
 
   private fun resolveMaxLines(viewId: Int?): Int = viewId?.let { numberOfLinesByViewId[it] } ?: 0
 
@@ -386,6 +397,7 @@ object MeasurementStore {
     result = 31 * result + linkPillContent.hashCode()
     result = 31 * result + props.getIntOrDefault("numberOfLines", 0)
     result = 31 * result + props.getStringOrDefault("ellipsizeMode", EllipsizeUtils.DEFAULT_MODE).hashCode()
+    result = 31 * result + props.getStringOrDefault("writingDirection", "").hashCode()
     return result
   }
 
@@ -577,6 +589,7 @@ object MeasurementStore {
       style.imageRequestHeaders = parseImageRequestHeaders(props.getArrayOrNull("imageRequestHeaders"))
       style.imageSourceOverrides = imageSources
       style.linkPillContent = parseLinkPillContent(props.getArrayOrNull("linkPillContent"))
+      style.writingDirection = resolveWritingDirection(id)
       val segments = splitASTIntoSegments(ast)
       val renderedSegments = MarkdownSegmentRenderer.render(segments, style, context, null, null)
 
@@ -759,6 +772,7 @@ object MeasurementStore {
         .obtain(inViewSpanOrder(content), 0, content.length, paint, widthPx)
         .setIncludePad(false)
         .setLineSpacing(0f, 1f)
+        .setWritingDirection(resolveWritingDirection(viewId), content)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       @Suppress("WrongConstant")

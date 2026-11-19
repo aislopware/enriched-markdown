@@ -711,6 +711,8 @@ export interface NativeProps extends ViewProps {
    *   matches Android's TEXT_DIRECTION_FIRST_STRONG.
    * - 'auto': React Native parity; iOS TextKit follows the app's userInterfaceLayoutDirection.
    * - 'ltr' / 'rtl': force base direction on every paragraph. Code blocks always stay LTR.
+   * - 'word-majority': each paragraph takes the direction most of its words read in. Also
+   *   honored on Android 10+.
    * @default 'first-strong'
    * @platform ios
    */

@@ -12,6 +12,7 @@ import android.text.Layout
 import android.text.Spannable
 import android.text.Spanned
 import android.text.StaticLayout
+import android.text.TextDirectionHeuristic
 import android.text.TextPaint
 import android.text.style.AlignmentSpan
 import android.text.style.MetricAffectingSpan
@@ -26,12 +27,16 @@ import com.swmansion.enriched.markdown.parser.MarkdownASTNode
 import com.swmansion.enriched.markdown.parser.MarkdownASTNode.NodeType
 import com.swmansion.enriched.markdown.renderer.Renderer
 import com.swmansion.enriched.markdown.spans.ImageSpan
+import com.swmansion.enriched.markdown.spans.InlineBackgroundGeometry
 import com.swmansion.enriched.markdown.spans.LinkPillSpan
 import com.swmansion.enriched.markdown.styles.StyleConfig
 import com.swmansion.enriched.markdown.styles.TableStyle
 import com.swmansion.enriched.markdown.utils.common.BoundsForWidthUtils
 import com.swmansion.enriched.markdown.utils.common.findEnrichedMarkdownAncestor
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownTextDirection
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
 import com.swmansion.enriched.markdown.utils.common.layout.isLayoutRTL
+import com.swmansion.enriched.markdown.utils.common.layout.setWritingDirection
 import com.swmansion.enriched.markdown.utils.common.serialization.MarkdownASTSerializer
 import com.swmansion.enriched.markdown.utils.text.conversion.HTMLGenerator
 import com.swmansion.enriched.markdown.utils.text.extensions.replaceMathSpansWithPlaceholders
@@ -280,6 +285,7 @@ class TableContainerView(
   ) {
     val cellTextView =
       CellTextView(context).apply {
+        writingDirection = styleConfig.writingDirection
         text = data.attributedText
         textSize = tableStyle.fontSize / resources.displayMetrics.scaledDensity
         typeface = if (data.isHeader) styleConfig.tableHeaderTypeface else styleConfig.tableTypeface
@@ -475,6 +481,7 @@ class TableContainerView(
             StaticLayout.Builder
               .obtain(cellText, 0, cellText.length, paint, maxColumnWidth.toInt())
               .setIncludePad(false)
+              .setWritingDirection(config.writingDirection, cellText)
               .apply { BoundsForWidthUtils.applyTo(this) }
               .build()
           val textWidth: Float = (0 until layout.lineCount).maxOfOrNull { line -> layout.getLineWidth(line) } ?: 0f
@@ -499,6 +506,7 @@ class TableContainerView(
                     paint,
                     contentWidth,
                   ).setIncludePad(false)
+                  .setWritingDirection(config.writingDirection, cellText)
                   .apply { BoundsForWidthUtils.applyTo(this) }
                   .build()
               ceil(layout.height.toFloat()) + verticalPadding
@@ -613,6 +621,32 @@ class TableContainerView(
   private class CellTextView(
     context: Context,
   ) : androidx.appcompat.widget.AppCompatTextView(context) {
+    // Nullable: TextView's constructor sets text and asks for the heuristic before this class initializes.
+    private val markdownTextDirection: MarkdownTextDirection? = MarkdownTextDirection()
+
+    var writingDirection: MarkdownWritingDirection
+      get() = markdownTextDirection?.writingDirection ?: MarkdownWritingDirection.FIRST_STRONG
+      set(value) {
+        // TextView caches the heuristic and only asks again when RTL properties change.
+        if (markdownTextDirection?.update(value, text) == true) onRtlPropertiesChanged(layoutDirection)
+      }
+
+    override fun getTextDirectionHeuristic(): TextDirectionHeuristic =
+      markdownTextDirection?.heuristic(layoutDirection == LAYOUT_DIRECTION_RTL) ?: super.getTextDirectionHeuristic()
+
+    override fun setText(
+      text: CharSequence?,
+      type: BufferType?,
+    ) {
+      val heuristicChanged = markdownTextDirection?.update(writingDirection, text) == true
+      super.setText(text, type)
+      if (heuristicChanged) onRtlPropertiesChanged(layoutDirection)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+      InlineBackgroundGeometry.drawWith(layout) { super.onDraw(canvas) }
+    }
+
     init {
       setPadding(0, 0, 0, 0)
       includeFontPadding = false

@@ -1,4 +1,5 @@
 #import "ParagraphStyleUtils.h"
+#import "CodeBackground.h"
 #import "ENRMFeatureFlags.h"
 #import "ENRMImageAttachment.h"
 #import "ENRMLinkPillAttachment.h"
@@ -62,7 +63,15 @@ ENRMWritingDirectionMode ENRMResolveWritingDirectionMode(NSString *value)
   if ([value isEqualToString:@"auto"]) {
     return ENRMWritingDirectionModeAuto;
   }
+  if ([value isEqualToString:@"word-majority"]) {
+    return ENRMWritingDirectionModeWordMajority;
+  }
   return ENRMWritingDirectionModeFirstStrong;
+}
+
+BOOL ENRMWritingDirectionModeResolvesFromContent(ENRMWritingDirectionMode mode)
+{
+  return mode == ENRMWritingDirectionModeFirstStrong || mode == ENRMWritingDirectionModeWordMajority;
 }
 
 // Hebrew through Arabic Extended-A, the presentation forms, and the two Plane 1
@@ -72,6 +81,12 @@ static BOOL ENRMIsRightToLeftScalar(UTF32Char scalar)
   return (scalar >= 0x0590 && scalar <= 0x08FF) || (scalar >= 0xFB1D && scalar <= 0xFDFF) ||
          (scalar >= 0xFE70 && scalar <= 0xFEFF) || (scalar >= 0x10800 && scalar <= 0x10FFF) ||
          (scalar >= 0x1E800 && scalar <= 0x1EFFF);
+}
+
+// Unicode `L*`: the letter set without its combining marks.
+static BOOL ENRMIsLetterScalar(UTF32Char scalar)
+{
+  return [kLetterCharacterSet longCharacterIsMember:scalar] && ![kNonBaseCharacterSet longCharacterIsMember:scalar];
 }
 
 NSWritingDirection ENRMFirstStrongDirection(NSString *text)
@@ -90,11 +105,139 @@ NSWritingDirection ENRMFirstStrongDirection(NSString *text)
     if (scalar == 0x200F || scalar == 0x061C) {
       return NSWritingDirectionRightToLeft;
     }
-    if ([kLetterCharacterSet longCharacterIsMember:scalar] && ![kNonBaseCharacterSet longCharacterIsMember:scalar]) {
+    if (ENRMIsLetterScalar(scalar)) {
       return ENRMIsRightToLeftScalar(scalar) ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
     }
   }
   return NSWritingDirectionNatural;
+}
+
+typedef struct {
+  NSInteger rtl;
+  NSInteger ltr;
+  NSWritingDirection first;
+} ENRMDirectionTally;
+
+static const ENRMDirectionTally kEmptyDirectionTally = {0, 0, NSWritingDirectionNatural};
+
+static void ENRMDirectionTallyAdd(ENRMDirectionTally *tally, NSWritingDirection direction)
+{
+  if (direction == NSWritingDirectionNatural) {
+    return;
+  }
+  if (tally->first == NSWritingDirectionNatural) {
+    tally->first = direction;
+  }
+  if (direction == NSWritingDirectionRightToLeft) {
+    tally->rtl++;
+  } else {
+    tally->ltr++;
+  }
+}
+
+static NSWritingDirection ENRMDirectionTallyMajority(ENRMDirectionTally tally)
+{
+  if (tally.rtl == tally.ltr) {
+    return tally.first;
+  }
+  return tally.rtl > tally.ltr ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
+}
+
+// JavaScript's `\s`, which the reference rule splits words on.
+static BOOL ENRMIsJSWhitespace(unichar unit)
+{
+  return (unit >= 0x09 && unit <= 0x0D) || unit == 0x20 || unit == 0xA0 || unit == 0x1680 ||
+         (unit >= 0x2000 && unit <= 0x200A) || unit == 0x2028 || unit == 0x2029 || unit == 0x202F || unit == 0x205F ||
+         unit == 0x3000 || unit == 0xFEFF;
+}
+
+static BOOL ENRMIsASCIIWordUnit(unichar unit)
+{
+  return (unit >= 'a' && unit <= 'z') || (unit >= 'A' && unit <= 'Z') || (unit >= '0' && unit <= '9') || unit == '_';
+}
+
+// Whether the whitespace at `index` follows a sentence end: `.`, `!`, `?` or `؟`, but not the
+// last dot of a standalone "e.g." or "i.e." (any case).
+static BOOL ENRMFollowsSentenceEnd(CFStringInlineBuffer *buffer, CFIndex index)
+{
+  if (index < 1) {
+    return NO;
+  }
+  unichar last = CFStringGetCharacterFromInlineBuffer(buffer, index - 1);
+  if (last == '!' || last == '?' || last == 0x061F) {
+    return YES;
+  }
+  if (last != '.') {
+    return NO;
+  }
+  if (index < 4 || CFStringGetCharacterFromInlineBuffer(buffer, index - 3) != '.') {
+    return YES;
+  }
+  unichar head = (unichar)(CFStringGetCharacterFromInlineBuffer(buffer, index - 4) | 0x20);
+  unichar tail = (unichar)(CFStringGetCharacterFromInlineBuffer(buffer, index - 2) | 0x20);
+  BOOL abbreviation = (head == 'e' && tail == 'g') || (head == 'i' && tail == 'e');
+  if (!abbreviation) {
+    return YES;
+  }
+  return index >= 5 && ENRMIsASCIIWordUnit(CFStringGetCharacterFromInlineBuffer(buffer, index - 5));
+}
+
+NSWritingDirection ENRMWordMajorityDirection(NSString *text)
+{
+  CFStringRef string = (__bridge CFStringRef)text;
+  CFIndex length = CFStringGetLength(string);
+  CFStringInlineBuffer buffer;
+  CFStringInitInlineBuffer(string, &buffer, CFRangeMake(0, length));
+
+  ENRMDirectionTally sentences = kEmptyDirectionTally;
+  ENRMDirectionTally words = kEmptyDirectionTally;
+  ENRMDirectionTally sentence = kEmptyDirectionTally;
+  // A word takes the direction of its first letter.
+  NSWritingDirection word = NSWritingDirectionNatural;
+
+  CFIndex i = 0;
+  while (i < length) {
+    unichar unit = CFStringGetCharacterFromInlineBuffer(&buffer, i);
+    if (ENRMIsJSWhitespace(unit)) {
+      ENRMDirectionTallyAdd(&sentence, word);
+      ENRMDirectionTallyAdd(&words, word);
+      word = NSWritingDirectionNatural;
+      BOOL sentenceEnds = ENRMFollowsSentenceEnd(&buffer, i);
+      for (; i < length; i++) {
+        unichar space = CFStringGetCharacterFromInlineBuffer(&buffer, i);
+        if (!ENRMIsJSWhitespace(space)) {
+          break;
+        }
+        sentenceEnds = sentenceEnds || space == '\n';
+      }
+      if (sentenceEnds) {
+        ENRMDirectionTallyAdd(&sentences, ENRMDirectionTallyMajority(sentence));
+        sentence = kEmptyDirectionTally;
+      }
+      continue;
+    }
+    UTF32Char scalar = unit;
+    CFIndex step = 1;
+    if (CFStringIsSurrogateHighCharacter(unit) && i + 1 < length) {
+      unichar low = CFStringGetCharacterFromInlineBuffer(&buffer, i + 1);
+      if (CFStringIsSurrogateLowCharacter(low)) {
+        scalar = CFStringGetLongCharacterForSurrogatePair(unit, low);
+        step = 2;
+      }
+    }
+    if (word == NSWritingDirectionNatural && ENRMIsLetterScalar(scalar)) {
+      word = ENRMIsRightToLeftScalar(scalar) ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
+    }
+    i += step;
+  }
+  ENRMDirectionTallyAdd(&sentence, word);
+  ENRMDirectionTallyAdd(&words, word);
+  ENRMDirectionTallyAdd(&sentences, ENRMDirectionTallyMajority(sentence));
+
+  if (sentences.rtl == sentences.ltr) {
+    return ENRMDirectionTallyMajority(words);
+  }
+  return sentences.rtl > sentences.ltr ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
 }
 
 BOOL ENRMParagraphIsRTL(NSParagraphStyle *style)
@@ -121,10 +264,46 @@ void ENRMApplyWritingDirectionMode(NSMutableAttributedString *output, ENRMWritin
     case ENRMWritingDirectionModeFirstStrong:
       ENRMApplyFirstStrongParagraphDirections(output, layoutDirection);
       break;
+    case ENRMWritingDirectionModeWordMajority:
+      ENRMApplyWordMajorityParagraphDirections(output, layoutDirection);
+      break;
   }
 }
 
-void ENRMApplyFirstStrongParagraphDirections(NSMutableAttributedString *output, NSWritingDirection fallback)
+static NSWritingDirection ENRMResolveFirstStrongParagraph(NSAttributedString *output, NSRange paragraphRange)
+{
+  return ENRMFirstStrongDirection([output.string substringWithRange:paragraphRange]);
+}
+
+// Inline code reads as whitespace, as in Onicode's desktop rule.
+static NSString *ENRMWordMajorityProseText(NSAttributedString *output, NSRange paragraphRange)
+{
+  NSString *text = [output.string substringWithRange:paragraphRange];
+  __block NSMutableString *masked = nil;
+  [output enumerateAttribute:CodeAttributeName
+                     inRange:paragraphRange
+                     options:0
+                  usingBlock:^(NSNumber *isCode, NSRange range, BOOL *stop) {
+                    if (!isCode.boolValue) {
+                      return;
+                    }
+                    if (!masked) {
+                      masked = [text mutableCopy];
+                    }
+                    NSString *spaces = [@"" stringByPaddingToLength:range.length withString:@" " startingAtIndex:0];
+                    [masked replaceCharactersInRange:NSMakeRange(range.location - paragraphRange.location, range.length)
+                                          withString:spaces];
+                  }];
+  return masked ?: text;
+}
+
+static NSWritingDirection ENRMResolveWordMajorityParagraph(NSAttributedString *output, NSRange paragraphRange)
+{
+  return ENRMWordMajorityDirection(ENRMWordMajorityProseText(output, paragraphRange));
+}
+
+static void ENRMApplyParagraphDirections(NSMutableAttributedString *output, NSWritingDirection fallback,
+                                         NSWritingDirection (*resolve)(NSAttributedString *, NSRange))
 {
   if (output.length == 0) {
     return;
@@ -146,7 +325,7 @@ void ENRMApplyFirstStrongParagraphDirections(NSMutableAttributedString *output, 
       continue;
     }
 
-    NSWritingDirection direction = ENRMFirstStrongDirection([string substringWithRange:paragraphRange]);
+    NSWritingDirection direction = resolve(output, paragraphRange);
     if (direction == NSWritingDirectionNatural) {
       direction = fallback;
     }
@@ -167,6 +346,16 @@ void ENRMApplyFirstStrongParagraphDirections(NSMutableAttributedString *output, 
                       [output addAttribute:NSParagraphStyleAttributeName value:updated range:range];
                     }];
   }
+}
+
+void ENRMApplyFirstStrongParagraphDirections(NSMutableAttributedString *output, NSWritingDirection fallback)
+{
+  ENRMApplyParagraphDirections(output, fallback, ENRMResolveFirstStrongParagraph);
+}
+
+void ENRMApplyWordMajorityParagraphDirections(NSMutableAttributedString *output, NSWritingDirection fallback)
+{
+  ENRMApplyParagraphDirections(output, fallback, ENRMResolveWordMajorityParagraph);
 }
 
 void ENRMApplyWritingDirectionToParagraphStyles(NSMutableAttributedString *output, NSWritingDirection writingDirection)

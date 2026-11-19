@@ -20,14 +20,20 @@ NSLineBreakMode ENRMResolveEllipsizeLineBreakMode(NSString *_Nullable mode);
 /// Auto/LTR/RTL match React Native's writingDirection prop.
 /// FirstStrong is the library extension: resolve each paragraph from its first strong
 /// directional character (matches Android's TEXT_DIRECTION_FIRST_STRONG).
+/// WordMajority resolves each paragraph from the direction most of its words take.
 typedef NS_ENUM(NSInteger, ENRMWritingDirectionMode) {
   ENRMWritingDirectionModeAuto,
   ENRMWritingDirectionModeLTR,
   ENRMWritingDirectionModeRTL,
   ENRMWritingDirectionModeFirstStrong,
+  ENRMWritingDirectionModeWordMajority,
 };
 
 ENRMWritingDirectionMode ENRMResolveWritingDirectionMode(NSString *_Nullable value);
+
+/// Whether the mode resolves each paragraph from its content, falling back to the
+/// layout direction for paragraphs without letters.
+BOOL ENRMWritingDirectionModeResolvesFromContent(ENRMWritingDirectionMode mode);
 
 void ENRMApplyWritingDirectionToParagraphStyles(NSMutableAttributedString *output, NSWritingDirection writingDirection);
 
@@ -36,11 +42,20 @@ NSWritingDirection ENRMFirstStrongDirection(NSString *text);
 /// Paragraphs without a strong character fall back to `fallback`. Code blocks are skipped.
 void ENRMApplyFirstStrongParagraphDirections(NSMutableAttributedString *output, NSWritingDirection fallback);
 
+/// Each sentence follows most of its words and the text follows most of its sentences;
+/// a sentence tie goes to the word majority, then the first word. Natural without letters.
+/// Mirrors Onicode's `textDirection` (packages/shared/src/textDirection.ts).
+NSWritingDirection ENRMWordMajorityDirection(NSString *text);
+
+/// ENRMApplyFirstStrongParagraphDirections with ENRMWordMajorityDirection per paragraph. Inline code
+/// (CodeAttributeName runs) counts as whitespace, as in Onicode's desktop rule.
+void ENRMApplyWordMajorityParagraphDirections(NSMutableAttributedString *output, NSWritingDirection fallback);
+
 /// Falls back to the app's UI layout direction when the style is missing or Natural.
 BOOL ENRMParagraphIsRTL(NSParagraphStyle *_Nullable style);
 
 /// Dispatch entry point used after every render pass. `layoutDirection` is the
-/// fallback for FirstStrong neutral paragraphs and is unused for the other modes.
+/// fallback for FirstStrong and WordMajority neutral paragraphs and is unused for the other modes.
 void ENRMApplyWritingDirectionMode(NSMutableAttributedString *output, ENRMWritingDirectionMode mode,
                                    NSWritingDirection layoutDirection);
 

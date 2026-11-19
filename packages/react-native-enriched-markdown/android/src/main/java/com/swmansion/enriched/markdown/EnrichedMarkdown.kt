@@ -44,6 +44,7 @@ import com.swmansion.enriched.markdown.utils.common.StreamingMarkdownFilter
 import com.swmansion.enriched.markdown.utils.common.TableStreamingMode
 import com.swmansion.enriched.markdown.utils.common.animatorDurationScale
 import com.swmansion.enriched.markdown.utils.common.isReducedMotionEnabled
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
 import com.swmansion.enriched.markdown.utils.text.TailFadeInAnimator
 import com.swmansion.enriched.markdown.utils.text.view.ImagePressHost
 import com.swmansion.enriched.markdown.utils.text.view.OnSelectionCopy
@@ -172,6 +173,7 @@ class EnrichedMarkdown(
   private var selectionMenuConfig = SelectionMenuConfig()
   private var accessibilityLabels = AccessibilityLabels()
   private var textBreakStrategy: String = BreakStrategyUtils.DEFAULT_STRATEGY
+  private var writingDirection = MarkdownWritingDirection.FIRST_STRONG
 
   private var onLinkPressCallback: ((String) -> Unit)? = null
   private var onLinkLongPressCallback: ((String) -> Unit)? = null
@@ -280,6 +282,7 @@ class EnrichedMarkdown(
     newConfig?.imageRequestHeaders = imageRequestHeaders
     newConfig?.imageSourceOverrides = imageSourceOverrides
     newConfig?.linkPillContent = linkPillContent
+    newConfig?.writingDirection = writingDirection
     if (markdownStyle == newConfig) return
     markdownStyle = newConfig
     dirtyFlags += DirtyFlag.RECREATE_SEGMENTS
@@ -444,6 +447,15 @@ class EnrichedMarkdown(
     renderPending = true
   }
 
+  fun setWritingDirection(direction: MarkdownWritingDirection) {
+    if (writingDirection == direction) return
+    writingDirection = direction
+    markdownStyle?.writingDirection = direction
+    dirtyFlags += DirtyFlag.RECREATE_SEGMENTS
+    dirtyFlags += DirtyFlag.FORCE_HEIGHT
+    renderPending = true
+  }
+
   private fun applySelectionColorsToSegments() {
     segmentViews.filterIsInstance<EnrichedMarkdownInternalText>().forEach {
       it.applySelectionColors(selectionColor, selectionHandleColor)
@@ -568,6 +580,7 @@ class EnrichedMarkdown(
           config.imageRequestHeaders = imageRequestHeaders
           config.imageSourceOverrides = imageSourceOverrides
           config.linkPillContent = linkPillContent
+          config.writingDirection = writingDirection
         }
     }
   }

@@ -30,10 +30,29 @@ Each top-level block gets `dir="auto"`, so the browser resolves it from its firs
 | `'auto'` | React Native parity. TextKit follows the app's `userInterfaceLayoutDirection`; mixed-direction documents do not auto-resolve. |
 | `'ltr'` | Forces LTR on every paragraph. |
 | `'rtl'` | Forces RTL on every paragraph. |
+| `'word-majority'` | Per-paragraph, by the direction most words read in. See [below](#word-majority). Also honored on Android. |
 
 Code blocks always render LTR regardless of this prop.
 
-Android ignores the prop; it always uses first-strong via the platform.
+Android ignores the other values; it always uses first-strong via the platform.
+
+### Word majority
+
+First-strong reads an Arabic or Hebrew paragraph that opens with an English word, an inline code span or a bare URL as left-to-right. `'word-majority'` resolves each paragraph (list item, heading, table cell) from its words instead:
+
+- A word takes the direction of its first letter; words without letters (numbers, punctuation, emoji) don't count.
+- Each sentence follows most of its words, and the paragraph follows most of its sentences, so one long English sentence cannot outvote the Arabic ones around it. Sentences end at `.`, `!`, `?` or `؟` followed by whitespace (not the dot in "e.g." or "i.e.").
+- A tie between sentences goes to the paragraph's word count, then to its first word.
+- Inline code doesn't count: it reads as whitespace, so a command quoted in Arabic prose can't outvote it. Link text and URLs count like any other words.
+- Paragraphs without letters fall back to the layout direction, as with `'first-strong'`. Directional marks (LRM, RLM) are not read.
+
+These are the counting rules of Onicode's desktop client, which feeds them each top-level block (a whole list or quote) rather than each paragraph. The native renderers keep the paragraph as the unit, so a list item or a line inside a quote can go the other way from its neighbours.
+
+On Android it needs Android 10 (API 29); older versions keep first-strong. Web ignores the prop.
+
+```tsx
+<EnrichedMarkdownText writingDirection="word-majority" markdown={reply} />
+```
 
 ```tsx
 // Default — mixed Arabic/English document renders each paragraph correctly.

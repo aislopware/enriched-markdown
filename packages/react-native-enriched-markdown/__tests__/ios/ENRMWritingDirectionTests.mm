@@ -1,3 +1,4 @@
+#import "CodeBackground.h"
 #import "LastElementUtils.h"
 #import "ParagraphStyleUtils.h"
 #import <XCTest/XCTest.h>
@@ -85,6 +86,110 @@
   ENRMApplyFirstStrongParagraphDirections(output, NSWritingDirectionRightToLeft);
 
   XCTAssertEqual([self directionOf:@"مرحبا" in:output], NSWritingDirectionNatural);
+}
+
+- (void)testWordMajorityFollowsMostWords
+{
+  XCTAssertEqual(ENRMWordMajorityDirection(@"Plantur هذا شرح عربي طويل للمنتج"), NSWritingDirectionRightToLeft);
+  XCTAssertEqual(ENRMWordMajorityDirection(@"https://example.com هذا شرح عربي طويل للرابط"),
+                 NSWritingDirectionRightToLeft);
+  XCTAssertEqual(ENRMWordMajorityDirection(@"مرحبا then run the build and tests."), NSWritingDirectionLeftToRight);
+  XCTAssertEqual(ENRMWordMajorityDirection(@"Hello مرحبا"), NSWritingDirectionLeftToRight,
+                 @"tie goes to the first word");
+  XCTAssertEqual(ENRMWordMajorityDirection(@"مرحبا Hello"), NSWritingDirectionRightToLeft,
+                 @"tie goes to the first word");
+  XCTAssertEqual(ENRMWordMajorityDirection(@"123 456."), NSWritingDirectionNatural);
+  XCTAssertEqual(ENRMWordMajorityDirection(@"\u200F123"), NSWritingDirectionNatural, @"marks are not letters");
+}
+
+- (void)testWordMajorityCountsSentencesBeforeWords
+{
+  XCTAssertEqual(ENRMWordMajorityDirection(@"This is one long English sentence with many words. مرحبا بك. شكرا لك."),
+                 NSWritingDirectionRightToLeft);
+  XCTAssertEqual(ENRMWordMajorityDirection(@"See e.g. this long English example here. مرحبا بك. شكرا لك."),
+                 NSWritingDirectionRightToLeft, @"e.g. does not end a sentence");
+  XCTAssertEqual(ENRMWordMajorityDirection(@"Plantur، Haarserum 100 مل، 14,95 €. سيروم مخصص للشعر الطويل "
+                                           @"بالكافيين، أغلى واحد في القائمة."),
+                 NSWritingDirectionRightToLeft, @"a sentence tie goes to the word count");
+}
+
+- (void)testWordMajorityParagraphsResolveFromTheirOwnContent
+{
+  NSMutableAttributedString *output =
+      [[NSMutableAttributedString alloc] initWithString:@"Plantur هذا شرح عربي\nمرحبا then run the build\n123"];
+
+  ENRMApplyWordMajorityParagraphDirections(output, NSWritingDirectionRightToLeft);
+
+  XCTAssertEqual([self directionOf:@"Plantur" in:output], NSWritingDirectionRightToLeft);
+  XCTAssertEqual([self directionOf:@"مرحبا then" in:output], NSWritingDirectionLeftToRight);
+  XCTAssertEqual([self directionOf:@"123" in:output], NSWritingDirectionRightToLeft);
+}
+
+// Onicode's apps/web/src/textDirection.test.ts, case for case, so the platforms cannot drift apart.
+- (void)testWordMajorityMatchesOnicodeDesktop
+{
+  NSWritingDirection rtl = NSWritingDirectionRightToLeft;
+  NSWritingDirection ltr = NSWritingDirectionLeftToRight;
+  NSArray<NSArray *> *cases = @[
+    @[ @"اكتب دالة تجمع الأرقام", @(rtl) ],
+    @[ @"תקן את הבאג", @(rtl) ],
+    @[ @"fix the failing test", @(ltr) ],
+    @[ @"StrictMode: يعيد الـ render مرتين في التطوير", @(rtl) ],
+    @[ @"translate the label مرحبا for the login screen", @(ltr) ],
+    @[ @"Done. تم إصلاح المشكلة في الملف الرئيسي", @(rtl) ],
+    @[ @"React مكتبة", @(ltr) ],
+    @[ @"مكتبة React", @(rtl) ],
+    @[ @"عدّل السطر 42، ثم شغّل الاختبارات (3)", @(rtl) ],
+    @[
+      @"هذا مثال على paragraph يحتوي على نص عربي و English words معًا. Arabic text should flow right-to-left while "
+      @"English words like JavaScript, React, and API should remain left-to-right within the same line. الأرقام "
+      @"1234567890 ورموز مثل @username و #hashtag و 100$ تظهر في الاتجاه الصحيح. هذه جملة لاختبار RTL rendering "
+      @"في المتصفح أو المحرر.",
+      @(rtl)
+    ],
+    @[ @"Run the migration first. ثم شغّل الاختبارات كلها. Then deploy to staging.", @(ltr) ],
+    @[ @"هذه جملة عربية تتحدث عن e.g. React i.e. TypeScript JavaScript", @(rtl) ],
+    @[
+      @"This long English sentence describes the technology sector in the U.S. هذه جملة عربية. وهذه جملة عربية أخرى.",
+      @(rtl)
+    ],
+  ];
+  for (NSArray *testCase in cases) {
+    XCTAssertEqual(ENRMWordMajorityDirection(testCase[0]), (NSWritingDirection)[testCase[1] integerValue], @"%@",
+                   testCase[0]);
+  }
+  XCTAssertEqual(ENRMWordMajorityDirection(@"42 — 7 ✓"), NSWritingDirectionNatural);
+}
+
+- (void)testWordMajorityLeavesInlineCodeOut
+{
+  NSMutableAttributedString *output =
+      [self stringWithInlineCode:
+                @"استخدم `npm run build` ثم `npm test`\nלערוך את `apps/web/src/chat.tsx` או להשאיר "
+                @"`useMemo`?\nShould I edit `useMemo` or keep it?\n`npm test`"];
+
+  ENRMApplyWordMajorityParagraphDirections(output, NSWritingDirectionRightToLeft);
+
+  XCTAssertEqual([self directionOf:@"استخدم" in:output], NSWritingDirectionRightToLeft);
+  XCTAssertEqual([self directionOf:@"לערוך" in:output], NSWritingDirectionRightToLeft);
+  XCTAssertEqual([self directionOf:@"Should" in:output], NSWritingDirectionLeftToRight);
+  NSParagraphStyle *codeOnly = [output attribute:NSParagraphStyleAttributeName
+                                         atIndex:output.length - 1
+                                  effectiveRange:nil];
+  XCTAssertEqual(codeOnly.baseWritingDirection, NSWritingDirectionRightToLeft,
+                 @"a paragraph of only inline code takes the fallback");
+}
+
+// Inline code between backticks, marked as CodeRenderer marks it.
+- (NSMutableAttributedString *)stringWithInlineCode:(NSString *)markdown
+{
+  NSMutableAttributedString *output = [[NSMutableAttributedString alloc] init];
+  NSArray<NSString *> *parts = [markdown componentsSeparatedByString:@"`"];
+  for (NSUInteger i = 0; i < parts.count; i++) {
+    NSDictionary *attributes = i % 2 == 1 ? @{CodeAttributeName : @YES} : @{};
+    [output appendAttributedString:[[NSAttributedString alloc] initWithString:parts[i] attributes:attributes]];
+  }
+  return output;
 }
 
 - (NSWritingDirection)directionOf:(NSString *)text in:(NSAttributedString *)output

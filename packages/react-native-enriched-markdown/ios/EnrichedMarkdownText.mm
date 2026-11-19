@@ -232,7 +232,7 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
 
 /// Publishes the committed size to the streaming fast path's mailbox, and picks
 /// up the Yoga-resolved direction inherited from any ancestor `direction` style.
-/// In FirstStrong mode the direction feeds the neutral-paragraph fallback, so a
+/// In FirstStrong and WordMajority modes the direction feeds the neutral-paragraph fallback, so a
 /// change requires a re-render of the cached markdown.
 ///
 /// The mailbox holds a content size, not the border box: `measureContent`
@@ -255,7 +255,7 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
 
   if (resolved != _resolvedLayoutDirection) {
     _resolvedLayoutDirection = resolved;
-    if (_writingDirectionMode == ENRMWritingDirectionModeFirstStrong && _cachedMarkdown.length > 0) {
+    if (ENRMWritingDirectionModeResolvesFromContent(_writingDirectionMode) && _cachedMarkdown.length > 0) {
       [self renderMarkdownContent:_cachedMarkdown];
     }
   }

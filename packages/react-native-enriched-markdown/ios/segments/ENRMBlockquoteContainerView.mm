@@ -29,15 +29,22 @@
 // vertical inset provides the bottom gap, and per-segment margins between children
 // still apply (allowTrailingMargin only gates the last child's bottom margin). The
 // consumer's allowFontScaling / lineBreakStrategy are threaded through so the
-// quote's content honors them the same way the root document path does.
-static NSArray<ENRMRenderedSegment *> *ENRMRenderBlockquoteChildren(MarkdownASTNode *node, StyleConfig *config,
-                                                                    BOOL allowFontScaling,
-                                                                    NSLineBreakStrategy lineBreakStrategy,
-                                                                    NSInteger taskIndexOffset)
+// quote's content honors them the same way the root document path does, and so
+// is the writing direction the root applies to its own text segments.
+static NSArray<ENRMRenderedSegment *> *
+ENRMRenderBlockquoteChildren(MarkdownASTNode *node, StyleConfig *config, BOOL allowFontScaling,
+                             NSLineBreakStrategy lineBreakStrategy, ENRMWritingDirectionMode writingDirectionMode,
+                             NSWritingDirection resolvedLayoutDirection, NSInteger taskIndexOffset)
 {
-  return ENRMRenderSegmentsFromAST(node, config, /*allowTrailingMargin*/ NO, allowFontScaling,
-                                   config.maxFontSizeMultiplier, lineBreakStrategy, /*blockquoteContent*/ YES,
-                                   taskIndexOffset);
+  NSArray<ENRMRenderedSegment *> *segments = ENRMRenderSegmentsFromAST(
+      node, config, /*allowTrailingMargin*/ NO, allowFontScaling, config.maxFontSizeMultiplier, lineBreakStrategy,
+      /*blockquoteContent*/ YES, taskIndexOffset);
+  for (ENRMRenderedSegment *segment in segments) {
+    if (segment.kind == ENRMSegmentKindText && segment.textResult) {
+      ENRMApplyWritingDirectionMode(segment.textResult.attributedText, writingDirectionMode, resolvedLayoutDirection);
+    }
+  }
+  return segments;
 }
 
 // The admonition type ("note"/"tip"/…) for a node, or nil for a plain quote.
@@ -134,6 +141,8 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
     // Preserved prior defaults until the host overrides them at creation.
     _allowFontScaling = YES;
     _lineBreakStrategy = NSLineBreakStrategyNone;
+    _writingDirectionMode = ENRMWritingDirectionModeFirstStrong;
+    _resolvedLayoutDirection = NSWritingDirectionLeftToRight;
     _dynamicProps = [[ENRMDynamicBlockProps alloc] init];
     _cachedMarkdown = @"";
     _cachedPlainText = @"";
@@ -154,7 +163,8 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
   self.cachedMarkdown = markdownFromBlockquoteNode(node);
   self.cachedPlainText = plainTextFromASTNode(node);
   NSArray<ENRMRenderedSegment *> *rendered =
-      ENRMRenderBlockquoteChildren(node, self.config, self.allowFontScaling, self.lineBreakStrategy, taskIndexOffset);
+      ENRMRenderBlockquoteChildren(node, self.config, self.allowFontScaling, self.lineBreakStrategy,
+                                   self.writingDirectionMode, self.resolvedLayoutDirection, taskIndexOffset);
   [self applySegments:rendered reset:NO];
 #if !TARGET_OS_OSX
   [self setNeedsDisplay];
@@ -235,6 +245,8 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                             if (strongSelf) {
                               view.dynamicProps = strongSelf.dynamicProps;
                               view.accessibilityLabels = strongSelf.accessibilityLabels;
+                              view.writingDirectionMode = strongSelf.writingDirectionMode;
+                              view.resolvedLayoutDirection = strongSelf.resolvedLayoutDirection;
                               view.onLinkPress = ^(NSString *url) {
                                 ENRMBlockquoteContainerView *s = weakSelf;
                                 if (s.onLinkPress && url)
@@ -255,7 +267,13 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                             return view;
                           }
                           updateView:^(RCTUIView *view, ENRMRenderedSegment *segment) {
-                            [(TableContainerView *)view applyTableNode:segment.tableSegment.tableNode];
+                            TableContainerView *tableView = (TableContainerView *)view;
+                            ENRMBlockquoteContainerView *strongSelf = weakSelf;
+                            if (strongSelf) {
+                              tableView.writingDirectionMode = strongSelf.writingDirectionMode;
+                              tableView.resolvedLayoutDirection = strongSelf.resolvedLayoutDirection;
+                            }
+                            [tableView applyTableNode:segment.tableSegment.tableNode];
                           }]];
 
   [handlers
@@ -297,6 +315,8 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                             if (strongSelf) {
                               view.allowFontScaling = strongSelf.allowFontScaling;
                               view.lineBreakStrategy = strongSelf.lineBreakStrategy;
+                              view.writingDirectionMode = strongSelf.writingDirectionMode;
+                              view.resolvedLayoutDirection = strongSelf.resolvedLayoutDirection;
                               view.dynamicProps = strongSelf.dynamicProps;
                               view.accessibilityLabels = strongSelf.accessibilityLabels;
                               view.onCopyPress = strongSelf.onCopyPress;
@@ -442,6 +462,8 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                          pointScaleFactor:(CGFloat)pointScaleFactor
                          allowFontScaling:(BOOL)allowFontScaling
                         lineBreakStrategy:(NSLineBreakStrategy)lineBreakStrategy
+                     writingDirectionMode:(ENRMWritingDirectionMode)writingDirectionMode
+                  resolvedLayoutDirection:(NSWritingDirection)resolvedLayoutDirection
                                wrapCursor:(ENRMCodeBlockWrapCursor *)wrapCursor
                              slotMeasurer:(ENRMBlockSlotMeasurer *)slotMeasurer
                                    origin:(CGPoint)origin
@@ -450,10 +472,11 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
   CGFloat innerWidth = MAX(maxWidth - insets.left - insets.right, 1);
 
   NSArray<ENRMRenderedSegment *> *rendered =
-      ENRMRenderBlockquoteChildren(node, config, allowFontScaling, lineBreakStrategy, /*taskIndexOffset*/ 0);
+      ENRMRenderBlockquoteChildren(node, config, allowFontScaling, lineBreakStrategy, writingDirectionMode,
+                                   resolvedLayoutDirection, /*taskIndexOffset*/ 0);
   CGFloat childrenHeight = ENRMMeasureSegmentsHeightViewFree(
-      rendered, config, innerWidth, /*allowTrailingMargin*/ NO, pointScaleFactor, ENRMWritingDirectionModeFirstStrong,
-      NSWritingDirectionNatural, allowFontScaling, lineBreakStrategy, wrapCursor, slotMeasurer,
+      rendered, config, innerWidth, /*allowTrailingMargin*/ NO, pointScaleFactor, writingDirectionMode,
+      resolvedLayoutDirection, allowFontScaling, lineBreakStrategy, wrapCursor, slotMeasurer,
       CGPointMake(origin.x + insets.left, origin.y + insets.top));
 
   return childrenHeight + insets.top + insets.bottom;

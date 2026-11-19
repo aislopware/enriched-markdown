@@ -353,7 +353,7 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
 
   if (resolved != _resolvedLayoutDirection) {
     _resolvedLayoutDirection = resolved;
-    if (_writingDirectionMode == ENRMWritingDirectionModeFirstStrong && _textView.textStorage.length > 0) {
+    if (ENRMWritingDirectionModeResolvesFromContent(_writingDirectionMode) && _textView.textStorage.length > 0) {
       [self applyFormatting];
     }
   }
@@ -1342,6 +1342,7 @@ static const NSTimeInterval kENRMAtomicSnapPollInterval = 0.1;
     case ENRMWritingDirectionModeRTL:
       return YES;
     case ENRMWritingDirectionModeFirstStrong:
+    case ENRMWritingDirectionModeWordMajority:
       return _resolvedLayoutDirection == NSWritingDirectionRightToLeft;
     case ENRMWritingDirectionModeAuto:
     default:

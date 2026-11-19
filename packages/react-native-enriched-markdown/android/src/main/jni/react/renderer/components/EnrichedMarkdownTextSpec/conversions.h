@@ -20,6 +20,8 @@ inline folly::dynamic toDynamic(const EnrichedMarkdownTextProps &props) {
   serializedProps["streamingConfig"] = toDynamic(props.streamingConfig);
   serializedProps["numberOfLines"] = props.numberOfLines;
   serializedProps["ellipsizeMode"] = props.ellipsizeMode;
+  // Measurement resolves each paragraph's direction the way the view draws it.
+  serializedProps["writingDirection"] = props.writingDirection;
 
   folly::dynamic imageRequestHeaders = folly::dynamic::array();
   for (const auto &header : props.imageRequestHeaders) {
@@ -55,6 +57,8 @@ inline folly::dynamic toDynamic(const EnrichedMarkdownProps &props) {
   serializedProps["isGFM"] = props.isGFM;
   // Wrapped code blocks measure at the block width; the indexes live in MeasurementStore.
   serializedProps["enableCodeBlockWrapToggle"] = props.enableCodeBlockWrapToggle;
+  // Measurement resolves each paragraph's direction the way the view draws it.
+  serializedProps["writingDirection"] = props.writingDirection;
 
   folly::dynamic imageRequestHeaders = folly::dynamic::array();
   for (const auto &header : props.imageRequestHeaders) {

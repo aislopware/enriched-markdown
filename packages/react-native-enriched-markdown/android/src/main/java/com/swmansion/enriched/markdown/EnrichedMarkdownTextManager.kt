@@ -21,6 +21,7 @@ import com.swmansion.enriched.markdown.utils.common.emitLinkLongPress
 import com.swmansion.enriched.markdown.utils.common.emitLinkPress
 import com.swmansion.enriched.markdown.utils.common.emitSelectionCopy
 import com.swmansion.enriched.markdown.utils.common.emitTaskListItemPress
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
 import com.swmansion.enriched.markdown.utils.common.markdownEventTypeConstants
 import com.swmansion.enriched.markdown.utils.common.parseAccessibilityLabels
 import com.swmansion.enriched.markdown.utils.common.parseContextMenuItems
@@ -274,7 +275,8 @@ class EnrichedMarkdownTextManager :
     view: EnrichedMarkdownText?,
     value: String?,
   ) {
-    // No-op on Android — first-strong per-paragraph resolution is the platform default
+    // Android resolves 'word-majority'; every other value keeps the platform's first-strong.
+    view?.writingDirection = MarkdownWritingDirection.fromProp(value)
   }
 
   @ReactProp(name = "streamingAnimation", defaultBoolean = false)

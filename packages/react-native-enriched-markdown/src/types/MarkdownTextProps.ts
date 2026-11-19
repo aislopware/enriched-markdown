@@ -550,10 +550,14 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
    *   auto-resolve.
    * - `'ltr'` / `'rtl'`: force base direction on every paragraph. Code blocks
    *   always stay LTR.
+   * - `'word-majority'`: each paragraph takes the direction most of its words
+   *   (by first letter) read in, so an Arabic paragraph that opens with an
+   *   English word or a URL stays RTL. Neutral-only paragraphs fall back like
+   *   `'first-strong'`. Also honored on Android 10+; elsewhere it is first-strong.
    * @default 'first-strong'
    * @platform ios
    */
-  writingDirection?: 'auto' | 'ltr' | 'rtl' | 'first-strong';
+  writingDirection?: 'auto' | 'ltr' | 'rtl' | 'first-strong' | 'word-majority';
   /**
    * Maximum number of lines to display before the text is truncated. `0` (the
    * default) means unlimited. Matches React Native `Text`'s `numberOfLines`.

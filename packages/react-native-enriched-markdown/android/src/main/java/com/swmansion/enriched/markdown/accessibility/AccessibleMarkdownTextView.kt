@@ -1,13 +1,18 @@
 package com.swmansion.enriched.markdown.accessibility
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Rect
+import android.text.TextDirectionHeuristic
 import android.util.AttributeSet
 import android.view.ActionMode
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.appcompat.widget.AppCompatTextView
+import com.swmansion.enriched.markdown.spans.InlineBackgroundGeometry
 import com.swmansion.enriched.markdown.spans.LinkPillSpan
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownTextDirection
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
 import com.swmansion.enriched.markdown.utils.text.span.prepareWidthAwareSpans
 import com.swmansion.enriched.markdown.utils.text.view.OnSelectionCopy
 import com.swmansion.enriched.markdown.utils.text.view.SelectionCopyFormat
@@ -26,6 +31,19 @@ abstract class AccessibleMarkdownTextView
 
     /** The selection toolbar while it is showing, kept up to date by the selection menu callback. */
     internal var selectionActionMode: ActionMode? = null
+
+    // Nullable: TextView's constructor sets text and asks for the heuristic before this class initializes.
+    private val markdownTextDirection: MarkdownTextDirection? = MarkdownTextDirection()
+
+    var writingDirection: MarkdownWritingDirection
+      get() = markdownTextDirection?.writingDirection ?: MarkdownWritingDirection.FIRST_STRONG
+      set(value) {
+        // TextView caches the heuristic and only asks again when RTL properties change.
+        if (markdownTextDirection?.update(value, text) == true) onRtlPropertiesChanged(layoutDirection)
+      }
+
+    override fun getTextDirectionHeuristic(): TextDirectionHeuristic =
+      markdownTextDirection?.heuristic(layoutDirection == LAYOUT_DIRECTION_RTL) ?: super.getTextDirectionHeuristic()
 
     // The selection menu's Copy ends up here, and Ctrl+C (and TalkBack's copy action) call this directly.
     override fun onTextContextMenuItem(id: Int): Boolean {
@@ -49,7 +67,13 @@ abstract class AccessibleMarkdownTextView
       val contentWidth = width - compoundPaddingLeft - compoundPaddingRight
       if (contentWidth > 0) prepareWidthAwareSpans(text, contentWidth)
       LinkPillSpan.registerView(text, this)
+      val heuristicChanged = markdownTextDirection?.update(writingDirection, text) == true
       super.setText(text, type)
+      if (heuristicChanged) onRtlPropertiesChanged(layoutDirection)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+      InlineBackgroundGeometry.drawWith(layout) { super.onDraw(canvas) }
     }
 
     override fun onMeasure(

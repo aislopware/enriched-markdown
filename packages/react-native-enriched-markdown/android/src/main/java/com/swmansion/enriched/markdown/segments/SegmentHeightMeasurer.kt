@@ -9,6 +9,8 @@ import android.text.TextPaint
 import com.swmansion.enriched.markdown.CodeBlockWrapCursor
 import com.swmansion.enriched.markdown.styles.StyleConfig
 import com.swmansion.enriched.markdown.utils.common.BoundsForWidthUtils
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
+import com.swmansion.enriched.markdown.utils.common.layout.setWritingDirection
 import com.swmansion.enriched.markdown.utils.text.extensions.replaceMathSpansWithPlaceholders
 import com.swmansion.enriched.markdown.utils.text.span.prepareWidthAwareSpans
 import com.swmansion.enriched.markdown.utils.text.view.inViewSpanOrder
@@ -123,7 +125,7 @@ object SegmentHeightMeasurer {
       when (segment) {
         is RenderedSegment.Text -> {
           segment.styledText.replaceMathSpansWithPlaceholders(context)
-          val layout = createStaticLayout(segment.styledText, fontSizePx, widthPx, breakStrategy)
+          val layout = createStaticLayout(segment.styledText, fontSizePx, widthPx, breakStrategy, style.writingDirection)
           totalHeightPx += layout.height
           val widestLine = (0 until layout.lineCount).maxOfOrNull { layout.getLineWidth(it) } ?: 0f
           maxContentWidthPx = maxOf(maxContentWidthPx, ceil(widestLine))
@@ -213,6 +215,7 @@ object SegmentHeightMeasurer {
     fontSizePx: Float,
     widthPx: Int,
     breakStrategy: Int,
+    writingDirection: MarkdownWritingDirection,
   ): StaticLayout {
     val paint =
       TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -223,6 +226,7 @@ object SegmentHeightMeasurer {
       .obtain(inViewSpanOrder(text), 0, text.length, paint, widthPx)
       .setIncludePad(false)
       .setLineSpacing(0f, 1f)
+      .setWritingDirection(writingDirection, text)
       .apply {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
           @Suppress("WrongConstant")

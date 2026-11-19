@@ -68,21 +68,8 @@ class CodeBackgroundSpan(
 
       // 2. Calculate coordinates
       val finalBottom = adjustBottomForMargin(text, end, bottom)
-      val leadingMargin = InlineBackgroundGeometry.leadingMarginAt(text, start)
-      val startX =
-        if (isFirst) {
-          InlineBackgroundGeometry.horizontalOffset(text, start, end, rangeStart, p, leadingMargin) + left
-        } else {
-          left.toFloat() + leadingMargin
-        }
-      val endX =
-        if (isLast) {
-          InlineBackgroundGeometry.horizontalOffset(text, start, end, rangeEnd, p, leadingMargin) + left
-        } else {
-          right.toFloat()
-        }
-
-      rect.set(min(startX, endX), top.toFloat(), max(startX, endX), finalBottom.toFloat())
+      InlineBackgroundGeometry.horizontalExtent(text, lineNum, start, end, rangeStart, rangeEnd, p, left, right, rect)
+      rect.set(min(rect.left, rect.right), top.toFloat(), max(rect.left, rect.right), finalBottom.toFloat())
 
       // 3. Apply Style
       val codeStyle = styleConfig.codeStyle

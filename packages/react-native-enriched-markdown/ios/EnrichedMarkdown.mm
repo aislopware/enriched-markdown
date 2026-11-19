@@ -473,6 +473,8 @@ static char kENRMSegmentFadeAnimatorKey;
   ENRMBlockquoteContainerView *view = [[ENRMBlockquoteContainerView alloc] initWithConfig:_config];
   view.allowFontScaling = _fontScaleObserver.allowFontScaling;
   view.lineBreakStrategy = _lineBreakStrategy;
+  view.writingDirectionMode = _writingDirectionMode;
+  view.resolvedLayoutDirection = _resolvedLayoutDirection;
   view.dynamicProps = _dynamicBlockProps;
   view.accessibilityLabels = _accessibilityLabels;
   view.onSelectionCopy = [self selectionCopyHandler];
@@ -889,7 +891,7 @@ static char kENRMSegmentFadeAnimatorKey;
 
 /// Publishes the committed size to the streaming fast path's mailbox, and picks
 /// up the Yoga-resolved direction inherited from any ancestor `direction` style.
-/// In FirstStrong mode the direction feeds the neutral-paragraph fallback, so a
+/// In FirstStrong and WordMajority modes the direction feeds the neutral-paragraph fallback, so a
 /// change requires segment recreation.
 ///
 /// The mailbox holds a content size, not the border box: `measureContent`
@@ -913,7 +915,7 @@ static char kENRMSegmentFadeAnimatorKey;
   if (resolved != _resolvedLayoutDirection) {
     _resolvedLayoutDirection = resolved;
     [self pushWritingDirectionToTableSegments];
-    if (_writingDirectionMode == ENRMWritingDirectionModeFirstStrong && _cachedMarkdown.length > 0) {
+    if (ENRMWritingDirectionModeResolvesFromContent(_writingDirectionMode) && _cachedMarkdown.length > 0) {
       _dirtyFlags |= ENRMDirtyRecreateSegments | ENRMDirtyForceHeight;
       [self renderMarkdownContent:_cachedMarkdown];
     }

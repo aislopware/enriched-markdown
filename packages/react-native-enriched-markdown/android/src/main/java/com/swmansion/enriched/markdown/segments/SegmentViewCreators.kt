@@ -97,6 +97,7 @@ object SegmentViewCreators {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         breakStrategy = BreakStrategyUtils.resolveBreakStrategy(config.textBreakStrategy)
       }
+      writingDirection = config.style.writingDirection
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && segment.needsJustify) {
         justificationMode = Layout.JUSTIFICATION_MODE_INTER_WORD
       }
