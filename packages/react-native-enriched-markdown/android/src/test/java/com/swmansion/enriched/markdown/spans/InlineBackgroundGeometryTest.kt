@@ -43,6 +43,19 @@ class InlineBackgroundGeometryTest {
     assertEquals(layout.width.toFloat(), continuing[1])
   }
 
+  @Test
+  fun rightToLeftRangeEndingAtASoftWrapStopsAtItsText() {
+    val text = "אאאא בבבב גגגג"
+    val layout = layout(text, paint.measureText("אאאא בבב").toInt(), TextDirectionHeuristics.RTL)
+    assertEquals(5, layout.getLineEnd(0))
+    val ending = extents(layout, 0, 0, 5)
+    assertEquals(2, ending.size)
+    assertTrue("${ending.toList()} reaches the edge", ending[0] >= layout.width - paint.measureText("אאאא ") - 1)
+    // A range that goes on to the next line still reaches the edge.
+    val continuing = extents(layout, 0, 0, 7)
+    assertEquals(0f, continuing[0])
+  }
+
   private fun layout(
     text: String,
     width: Int,
