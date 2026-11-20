@@ -321,7 +321,8 @@ jobs:
       - changes
       - rn-ios-cache
     if: ${{ !cancelled() && needs.changes.outputs.react-native == 'true' && needs.rn-ios-cache.outputs.rn-ios-build-and-tests != 'HIT' }}
-    runs-on: macos-latest-xlarge
+    # Upstream uses macos-latest-xlarge, a paid runner this fork's account does not fund.
+    runs-on: macos-latest
     env:
       TURBO_CACHE_DIR: .turbo/rn-ios-test
       CCACHE_DIR: ${{ github.workspace }}/.ccache
