@@ -727,6 +727,8 @@ jobs:
             "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux_amd64.zip"
           mkdir -p "$RUNNER_TEMP/swiftlint"
           unzip -oq "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/swiftlint"
+          # The dynamic binary needs libxml2.so.2, which Ubuntu 26.04 no longer ships.
+          mv -f "$RUNNER_TEMP/swiftlint/swiftlint-static" "$RUNNER_TEMP/swiftlint/swiftlint"
           echo "$RUNNER_TEMP/swiftlint" >> $GITHUB_PATH
 
       - name: Run Swift lint
