@@ -85,10 +85,18 @@ final class InlineStyleRendererTests: XCTestCase {
 
     // MARK: - Superscript / subscript
 
-    func testCaretAndTildeRenderLiterallyWithoutFlags() {
-        let result = MarkdownRenderer.render("x^2^ H~2~O", config: config)
+    func testCaretRendersLiterallyWithoutFlag() {
+        let result = MarkdownRenderer.render("x^2^", config: config)
         XCTAssertTrue(result.string.contains("x^2^"))
-        XCTAssertTrue(result.string.contains("H~2~O"))
+    }
+
+    // Tildes flank like asterisks here, as on GitHub, so without the subscript flag an
+    // intraword pair is a strikethrough.
+    func testTildePairStrikesThroughWithoutSubscriptFlag() {
+        let result = MarkdownRenderer.render("H~2~O", config: config)
+        XCTAssertTrue(result.string.contains("H2O"))
+        assertLineStyle(.strikethroughStyle, in: result, onWord: "2")
+        XCTAssertEqual(fontSize(onWord: "2", in: result), fontSize(onWord: "H", in: result), accuracy: 0.001)
     }
 
     func testParserEmitsSuperscriptAndSubscriptNodesOnlyWithFlags() {
