@@ -30,8 +30,8 @@ static void ENRMCollectBitmapViews(UIView *view, NSMutableArray<UIView *> *views
   static NSSet<NSString *> *names;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    names =
-        [NSSet setWithArray:@[ @"ENRMCodeBlockContainerView", @"ENRMCodeBlockContentView", @"ENRMTableIOSGridView" ]];
+    names = [NSSet
+        setWithArray:@[ @"ENRMCodeBlockContainerView", @"ENRMCodeBlockBitmapCanvasView", @"ENRMTableIOSGridView" ]];
   });
   if ([names containsObject:NSStringFromClass([view class])]) {
     [views addObject:view];
@@ -129,6 +129,21 @@ static CGRect ENRMBlockTestDrawnTextRect(UIView *view, UIView *textView)
   return document;
 }
 
+// Runs the main run loop until a turn of it ends: where Core Animation commits, and the document
+// drops after it. Not for a fixed time, which a turn that handles one slow source uses up before its
+// end.
+- (void)runTheRunLoopToTheEndOfATurn
+{
+  XCTestExpectation *ended = [self expectationWithDescription:@"a run loop turn ended"];
+  CFRunLoopObserverRef observer = CFRunLoopObserverCreateWithHandler(
+      kCFAllocatorDefault, kCFRunLoopBeforeWaiting, false, LONG_MAX,
+      ^(CFRunLoopObserverRef firing, CFRunLoopActivity activity) { [ended fulfill]; });
+  CFRunLoopAddObserver(CFRunLoopGetMain(), observer, kCFRunLoopCommonModes);
+  [self waitForExpectations:@[ ended ] timeout:30];
+  CFRunLoopObserverInvalidate(observer);
+  CFRelease(observer);
+}
+
 - (void)scrollToTheEnd
 {
   _scrollView.contentOffset = CGPointMake(0, _document.bounds.size.height - kENRMBlockTestWindowHeight);
@@ -188,7 +203,7 @@ static CGRect ENRMBlockTestDrawnTextRect(UIView *view, UIView *textView)
   // Drawn by hand: a test's run loop turn commits without drawing, so this checks that the drop
   // runs in that turn, not that it follows Core Animation's commit.
   ENRMDrawBitmaps(views);
-  [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  [self runTheRunLoopToTheEndOfATurn];
   for (UIView *view in views) {
     XCTAssertNil(view.layer.contents, @"%@", view);
   }
