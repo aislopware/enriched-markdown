@@ -32,6 +32,15 @@ enum class MarkdownWritingDirection {
 }
 
 /**
+ * Whether a stream of [markdown] can reach its text views as patches. Word majority reads a text
+ * set whole ([MarkdownTextDirection.update]), so text it may resolve right to left renders in full.
+ */
+internal fun MarkdownWritingDirection.allowsTextPatches(
+  markdown: CharSequence,
+  layoutRtl: Boolean,
+): Boolean = !resolvesWordMajority || (!layoutRtl && !hasRightToLeftCharacter(markdown))
+
+/**
  * Measures [text] with the heuristic a markdown text view draws it with. The neutral-paragraph
  * fallback is the locale's direction, which the view resolves too unless an ancestor sets `direction`.
  */
@@ -77,6 +86,15 @@ class MarkdownTextDirection {
     inlineCode.read(text)
     return directionChanged || hadRightToLeft != hasRightToLeft
   }
+
+  /**
+   * Whether [tail] can replace the text's end in place, without [update]: only while no paragraph
+   * is resolved by word majority, before and after, so there is nothing to read ahead of the layout.
+   */
+  fun allowsPatch(
+    tail: CharSequence,
+    layoutRtl: Boolean,
+  ): Boolean = !writingDirection.resolvesWordMajority || (!hasRightToLeft && writingDirection.allowsTextPatches(tail, layoutRtl))
 
   /**
    * Null keeps the platform's first-strong. Text that cannot hold a right-to-left paragraph in a

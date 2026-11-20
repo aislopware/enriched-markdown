@@ -2,6 +2,7 @@
 #import "ENRMAccessibilityLabels.h"
 #import "ENRMCodeBlockContent.h"
 #import "ENRMCodeBlockHighlighter.h"
+#import "ENRMDroppableContent.h"
 #import "ENRMHorizontalScrollView.h"
 #import "MarkdownASTNode.h"
 #import "PasteboardUtils.h"
@@ -217,6 +218,14 @@ static const CGFloat kENRMCodeBlockMaxUntiledPixels = 2048 * 2048;
 
 @end
 
+// One backing store for the whole pane: the bitmap EnrichedMarkdown drops while the block is off
+// screen. A tiled layer keeps only the tiles it shows.
+@interface ENRMCodeBlockBitmapCanvasView : ENRMCodeBlockCanvasView <ENRMDroppableContent>
+@end
+
+@implementation ENRMCodeBlockBitmapCanvasView
+@end
+
 @interface ENRMCodeBlockTiledLayer : CATiledLayer
 @end
 
@@ -282,8 +291,8 @@ static const CGFloat kENRMCodeBlockMaxUntiledPixels = 2048 * 2048;
   [super layoutSubviews];
   CGFloat scale = self.traitCollection.displayScale > 0 ? self.traitCollection.displayScale : 3;
   CGFloat pixels = self.bounds.size.width * self.bounds.size.height * scale * scale;
-  Class canvasClass =
-      pixels > kENRMCodeBlockMaxUntiledPixels ? [ENRMCodeBlockTiledCanvasView class] : [ENRMCodeBlockCanvasView class];
+  Class canvasClass = pixels > kENRMCodeBlockMaxUntiledPixels ? [ENRMCodeBlockTiledCanvasView class]
+                                                              : [ENRMCodeBlockBitmapCanvasView class];
   if (![_canvas isMemberOfClass:canvasClass]) {
     [_canvas removeFromSuperview];
     _canvas = [[canvasClass alloc] initWithFrame:self.bounds];
@@ -382,7 +391,8 @@ static const CGFloat kENRMCodeBlockMaxUntiledPixels = 2048 * 2048;
 @end
 
 #if !TARGET_OS_OSX
-@interface ENRMCodeBlockContainerView () <UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate>
+@interface ENRMCodeBlockContainerView () <UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate,
+                                          ENRMDroppableContent>
 @end
 #endif
 

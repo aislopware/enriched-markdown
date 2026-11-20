@@ -162,6 +162,20 @@ class WordMajorityDirectionTest {
     assertEquals(true, view.update(MarkdownWritingDirection.WORD_MAJORITY, "\u200F123"))
   }
 
+  // A patch skips the read of the whole text that word majority resolves paragraphs from.
+  @Test
+  fun aStreamPatchesItsTextOnlyWhileNothingResolvesByWordMajority() {
+    val view = MarkdownTextDirection()
+    view.update(MarkdownWritingDirection.WORD_MAJORITY, "Plain English.")
+    assertEquals(true, view.allowsPatch("More English.", layoutRtl = false))
+    assertEquals(false, view.allowsPatch("More English.", layoutRtl = true))
+    assertEquals(false, view.allowsPatch("ثم نص عربي.", layoutRtl = false))
+    view.update(MarkdownWritingDirection.WORD_MAJORITY, "نص عربي.")
+    assertEquals(false, view.allowsPatch("More English.", layoutRtl = false))
+    view.update(MarkdownWritingDirection.FIRST_STRONG, "نص عربي.")
+    assertEquals(true, view.allowsPatch("ثم نص عربي.", layoutRtl = true))
+  }
+
   private fun code(content: String) = MarkdownASTNode(NodeType.Code, children = listOf(text(content)))
 
   private fun measure(text: CharSequence): StaticLayout =

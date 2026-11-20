@@ -339,9 +339,9 @@ NSString *markdownFromTableCellNode(MarkdownASTNode *node)
   if (![markdown containsString:@"\n"])
     return markdown;
   return [markdown stringByReplacingOccurrencesOfString:@"(?<!\\\\)(\\\\*)\n"
-                                            withString:@"$1$1<br>"
-                                               options:NSRegularExpressionSearch
-                                                 range:NSMakeRange(0, markdown.length)];
+                                             withString:@"$1$1<br>"
+                                                options:NSRegularExpressionSearch
+                                                  range:NSMakeRange(0, markdown.length)];
 }
 
 NSString *markdownFromBlockquoteNode(MarkdownASTNode *node)
