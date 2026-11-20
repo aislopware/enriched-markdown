@@ -67,6 +67,8 @@ class WordMajorityDirectionTest {
         "Run the migration first. ثم شغّل الاختبارات كلها. Then deploy to staging." to false,
         "هذه جملة عربية تتحدث عن e.g. React i.e. TypeScript JavaScript" to true,
         "This long English sentence describes the technology sector in the U.S. هذه جملة عربية. وهذه جملة عربية أخرى." to true,
+        "ראה https://github.com/aislopware/onicode/pull/24050 לפני" to true,
+        "Please check the שלום label before the release" to false,
       )
     for ((text, rtl) in cases) assertEquals(text, rtl, direction(text))
     assertEquals(null, direction("42 — 7 ✓"))
@@ -98,6 +100,57 @@ class WordMajorityDirectionTest {
     val newline = arabic.indexOf('\n')
     val paragraph = arabic.substring(0, if (newline < 0) arabic.length else newline + 1).toCharArray()
     assertEquals(true, view.heuristic(layoutRtl = false)!!.isRtl(paragraph, 0, paragraph.size))
+  }
+
+  @Test
+  fun paragraphsWithTheSameCharactersDoNotShareAnInlineCodeAnswer() {
+    // Alone, the first reads right to left (code left out) and the second left to right.
+    val codeFirst = paragraph(text("שלום "), code("run"), text(" the build עכשיו"))
+    val codeLast = paragraph(text("שלום run the build "), code("עכשיו"))
+    val plain = paragraph(text("שלום run the build עכשיו"))
+    val rendered = render(styleConfig(), paragraph(text("Intro")), codeFirst, codeLast, plain, paragraph(text("End")))
+    val layout = measure(rendered)
+    val codeFirstStart = rendered.indexOf("שלום")
+    val codeLastStart = rendered.indexOf("שלום", codeFirstStart + 1)
+    val plainStart = rendered.indexOf("שלום", codeLastStart + 1)
+    // Android hands the heuristic a bare copy, so the shared answer counts every word, code included.
+    assertEquals(Layout.DIR_LEFT_TO_RIGHT, layout.getParagraphDirection(layout.getLineForOffset(codeFirstStart)))
+    assertEquals(Layout.DIR_LEFT_TO_RIGHT, layout.getParagraphDirection(layout.getLineForOffset(codeLastStart)))
+    assertEquals(Layout.DIR_LEFT_TO_RIGHT, layout.getParagraphDirection(layout.getLineForOffset(plainStart)))
+  }
+
+  @Test
+  fun aPlainParagraphDoesNotTakeTheAnswerOfOneCodeParagraphWithItsCharacters() {
+    val codeFirst = paragraph(text("שלום "), code("run"), text(" the build עכשיו"))
+    val plain = paragraph(text("שלום run the build עכשיו"))
+    val view = MarkdownTextDirection()
+    // On each update the code paragraph's answer follows whether its plain twin is there.
+    for (blocks in listOf(listOf(codeFirst, plain), listOf(codeFirst), listOf(codeFirst, plain))) {
+      val rendered = render(styleConfig(), *blocks.toTypedArray(), paragraph(text("End")))
+      view.update(MarkdownWritingDirection.WORD_MAJORITY, rendered)
+      val copy = rendered.substring(0, rendered.indexOf('\n') + 1).toCharArray()
+      assertEquals(blocks.size == 1, view.heuristic(layoutRtl = false)!!.isRtl(copy, 0, copy.size))
+    }
+  }
+
+  @Test
+  fun paragraphsThatDifferOnlyInInlineCodeGetOneStableAnswer() {
+    // Same characters, different inline code: one view gives both copies the same answer on every update.
+    val codeFirst = paragraph(text("שלום "), code("run"), text(" the build עכשיו"))
+    val codeLast = paragraph(text("שלום run the build "), code("עכשיו"))
+    // A closing paragraph keeps the newline in both copies.
+    val renders =
+      listOf(listOf(codeFirst, codeLast), listOf(codeLast, codeFirst)).map {
+        render(styleConfig(), *it.toTypedArray(), paragraph(text("End")))
+      }
+    val view = MarkdownTextDirection()
+    for (rendered in renders + renders) {
+      view.update(MarkdownWritingDirection.WORD_MAJORITY, rendered)
+      for (start in listOf(0, rendered.indexOf("שלום", 1))) {
+        val copy = rendered.substring(start, rendered.indexOf('\n', start) + 1).toCharArray()
+        assertEquals(false, view.heuristic(layoutRtl = false)!!.isRtl(copy, 0, copy.size))
+      }
+    }
   }
 
   @Test

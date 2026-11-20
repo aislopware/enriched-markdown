@@ -62,21 +62,26 @@ class CodeBackgroundSpan(
       rangeEnd: Int,
     ) {
       if (max(rangeStart, start) >= min(rangeEnd, end)) return
-      // 1. Determine relative positioning
+      // 1. Determine relative positioning. The code's start faces the text before it, on the right
+      // in a right-to-left paragraph.
       val isFirst = rangeStart >= start
       val isLast = rangeEnd <= end
+      val rtl = InlineBackgroundGeometry.isRightToLeftLine(text, lineNum, start)
+      val closedLeft = if (rtl) isLast else isFirst
+      val closedRight = if (rtl) isFirst else isLast
 
-      // 2. Calculate coordinates
+      // 2. Apply Style
       val finalBottom = adjustBottomForMargin(text, end, bottom)
-      InlineBackgroundGeometry.horizontalExtent(text, lineNum, start, end, rangeStart, rangeEnd, p, left, right, rect)
-      rect.set(min(rect.left, rect.right), top.toFloat(), max(rect.left, rect.right), finalBottom.toFloat())
-
-      // 3. Apply Style
       val codeStyle = styleConfig.codeStyle
       sharedBackgroundPaint.color = codeStyle.backgroundColor
       sharedBorderPaint.color = codeStyle.borderColor
 
-      drawShapes(canvas, isFirst, isLast)
+      // 3. Draw each visually separate piece; the sides between pieces are closed.
+      val extents = InlineBackgroundGeometry.horizontalExtents(text, lineNum, start, end, rangeStart, rangeEnd, p, left, right)
+      for (i in extents.indices step 2) {
+        rect.set(extents[i], top.toFloat(), extents[i + 1], finalBottom.toFloat())
+        drawShapes(canvas, roundLeft = closedLeft || i > 0, roundRight = closedRight || i + 2 < extents.size)
+      }
     }
 
     // Runs per code span, per line, per draw: only query for pills if the style can produce any.
@@ -99,38 +104,38 @@ class CodeBackgroundSpan(
 
   private fun drawShapes(
     canvas: Canvas,
-    isFirst: Boolean,
-    isLast: Boolean,
+    roundLeft: Boolean,
+    roundRight: Boolean,
   ) {
-    val radii = createRadii(isFirst, isLast)
+    val radii = createRadii(roundLeft, roundRight)
 
     path.reset()
     path.addRoundRect(rect, radii, Path.Direction.CW)
     canvas.drawPath(path, sharedBackgroundPaint)
 
-    if (isFirst && isLast) {
+    if (roundLeft && roundRight) {
       canvas.drawPath(path, sharedBorderPaint)
     } else {
-      drawOpenBorders(canvas, isFirst, isLast)
+      drawOpenBorders(canvas, roundLeft, roundRight)
     }
   }
 
   private fun drawOpenBorders(
     canvas: Canvas,
-    isFirst: Boolean,
-    isLast: Boolean,
+    roundLeft: Boolean,
+    roundRight: Boolean,
   ) {
     val r = CORNER_RADIUS
     path.reset()
 
-    if (isFirst) {
+    if (roundLeft) {
       path.moveTo(rect.right, rect.top)
       path.lineTo(rect.left + r, rect.top)
       path.quadTo(rect.left, rect.top, rect.left, rect.top + r)
       path.lineTo(rect.left, rect.bottom - r)
       path.quadTo(rect.left, rect.bottom, rect.left + r, rect.bottom)
       path.lineTo(rect.right, rect.bottom)
-    } else if (isLast) {
+    } else if (roundRight) {
       path.moveTo(rect.left, rect.top)
       path.lineTo(rect.right - r, rect.top)
       path.quadTo(rect.right, rect.top, rect.right, rect.top + r)
@@ -147,10 +152,10 @@ class CodeBackgroundSpan(
   }
 
   private fun createRadii(
-    isFirst: Boolean,
-    isLast: Boolean,
+    roundLeft: Boolean,
+    roundRight: Boolean,
   ) = when {
-    isFirst && isLast -> {
+    roundLeft && roundRight -> {
       floatArrayOf(
         CORNER_RADIUS,
         CORNER_RADIUS,
@@ -163,11 +168,11 @@ class CodeBackgroundSpan(
       )
     }
 
-    isFirst -> {
+    roundLeft -> {
       floatArrayOf(CORNER_RADIUS, CORNER_RADIUS, 0f, 0f, 0f, 0f, CORNER_RADIUS, CORNER_RADIUS)
     }
 
-    isLast -> {
+    roundRight -> {
       floatArrayOf(0f, 0f, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 0f, 0f)
     }
 

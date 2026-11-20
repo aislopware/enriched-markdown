@@ -3,7 +3,6 @@ package com.swmansion.enriched.markdown.spans
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RectF
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.style.CharacterStyle
@@ -26,7 +25,6 @@ class HighlightSpan(
   LineBackgroundSpan {
   private val foregroundColor = styleCache.getHighlightColorFor(blockStyle.color)
   private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-  private val extent = RectF()
 
   override fun updateDrawState(textPaint: TextPaint) {
     textPaint.color = foregroundColor
@@ -53,9 +51,7 @@ class HighlightSpan(
     val spanEnd = text.getSpanEnd(this)
     if (spanStart !in 0 until spanEnd) return
 
-    InlineBackgroundGeometry.horizontalExtent(text, lineNum, start, end, spanStart, spanEnd, p, left, right, extent)
-    val startX = extent.left
-    val endX = extent.right
+    val extents = InlineBackgroundGeometry.horizontalExtents(text, lineNum, start, end, spanStart, spanEnd, p, left, right)
 
     // Bound by the glyphs' ascent/descent, clamped to the line box so a tall line height never
     // lets the band bleed into its neighbours.
@@ -64,6 +60,6 @@ class HighlightSpan(
     val bandBottom = min(bottom.toFloat(), (baseline + metrics.descent).toFloat())
 
     backgroundPaint.color = backgroundColor
-    canvas.drawRect(min(startX, endX), bandTop, max(startX, endX), bandBottom, backgroundPaint)
+    for (i in extents.indices step 2) canvas.drawRect(extents[i], bandTop, extents[i + 1], bandBottom, backgroundPaint)
   }
 }

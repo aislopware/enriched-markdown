@@ -1,5 +1,6 @@
 #import "CodeBackground.h"
 #import "ENRMUIKit.h"
+#import "ParagraphStyleUtils.h"
 #import "RenderContext.h"
 
 NSString *const CodeAttributeName = @"Code";
@@ -64,6 +65,10 @@ static const CGFloat kCodeBackgroundBorderWidth = 0.5;
     return;
 
   CGFloat referenceHeight = [self findReferenceHeightForRange:range textStorage:layoutManager.textStorage];
+  // A right-to-left paragraph wraps at the left: the code's start faces the text before it on the right.
+  BOOL isRTL = ENRMParagraphIsRTL([layoutManager.textStorage attribute:NSParagraphStyleAttributeName
+                                                               atIndex:range.location
+                                                        effectiveRange:NULL]);
 
   [layoutManager
       enumerateLineFragmentsForGlyphRange:glyphRange
@@ -84,8 +89,12 @@ static const CGFloat kCodeBackgroundBorderWidth = 0.5;
                                    finalRect = CGRectMake(textRect.origin.x + origin.x, textRect.origin.y + origin.y,
                                                           textRect.size.width, textRect.size.height);
 
-                                   // For multi-line, extend the first line to the right edge of the fragment
-                                   if (isFirst && !isLast) {
+                                   // For multi-line, extend the first line to the end edge of the fragment
+                                   if (isFirst && !isLast && isRTL) {
+                                     CGFloat lineLeft = usedRect.origin.x + origin.x;
+                                     finalRect.size.width = CGRectGetMaxX(finalRect) - lineLeft;
+                                     finalRect.origin.x = lineLeft;
+                                   } else if (isFirst && !isLast) {
                                      finalRect.size.width =
                                          (usedRect.origin.x + usedRect.size.width + origin.x) - finalRect.origin.x;
                                    }
@@ -103,8 +112,8 @@ static const CGFloat kCodeBackgroundBorderWidth = 0.5;
                                  [self drawBackgroundAndBorders:finalRect
                                                 backgroundColor:backgroundColor
                                                     borderColor:borderColor
-                                                        isFirst:isFirst
-                                                         isLast:isLast];
+                                                        isFirst:isRTL ? isLast : isFirst
+                                                         isLast:isRTL ? isFirst : isLast];
                                }];
 }
 

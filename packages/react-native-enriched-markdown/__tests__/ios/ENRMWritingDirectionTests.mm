@@ -153,6 +153,8 @@
       @"This long English sentence describes the technology sector in the U.S. هذه جملة عربية. وهذه جملة عربية أخرى.",
       @(rtl)
     ],
+    @[ @"ראה https://github.com/aislopware/onicode/pull/24050 לפני", @(rtl) ],
+    @[ @"Please check the שלום label before the release", @(ltr) ],
   ];
   for (NSArray *testCase in cases) {
     XCTAssertEqual(ENRMWordMajorityDirection(testCase[0]), (NSWritingDirection)[testCase[1] integerValue], @"%@",

@@ -114,7 +114,8 @@ private class WordMajorityHeuristic(
  * Leaves inline code out of the count, as Onicode's desktop does. StaticLayout hands the heuristic a
  * bare copy of each paragraph, so the paragraphs holding inline code are resolved ahead from the
  * spans and looked up by that copy: the paragraph's characters, its newline included, with
- * ReplacementSpan ranges as U+FFFC (MeasuredParagraph).
+ * ReplacementSpan ranges as U+FFFC (MeasuredParagraph). Paragraphs with the same copy but different
+ * answers cannot be told apart, so they all count their inline code.
  */
 private class InlineCodeParagraphs {
   private var directions: Map<String, Boolean?> = emptyMap()
@@ -141,19 +142,64 @@ private fun inlineCodeParagraphDirections(text: Spanned): Map<String, Boolean?> 
   val codeSpans = text.getSpans(0, text.length, CodeSpan::class.java)
   if (codeSpans.isEmpty()) return emptyMap()
   val directions = HashMap<String, Boolean?>()
-  for (code in codeSpans) {
-    val codeStart = text.getSpanStart(code)
+  val ambiguous = HashSet<String>()
+
+  fun record(
+    key: String,
+    isRtl: Boolean?,
+  ) {
+    if (!directions.containsKey(key)) {
+      directions[key] = isRtl
+    } else if (directions[key] != isRtl) {
+      ambiguous.add(key)
+    }
+  }
+
+  val codeStarts = IntArray(codeSpans.size) { text.getSpanStart(codeSpans[it]) }
+  codeStarts.sort()
+  val codeParagraphs = HashSet<Int>()
+  var covered = 0
+  for (codeStart in codeStarts) {
+    if (codeStart < covered) continue
     var start = codeStart
     while (start > 0 && text[start - 1] != '\n') start--
-    var end = codeStart
-    while (end < text.length && text[end] != '\n') end++
-    if (end < text.length) end++
+    val end = paragraphEnd(text, codeStart)
+    covered = end
+    codeParagraphs.add(start)
     val chars = paragraphCopy(text, start, end)
+    // Keyed before maskedIsRtl blanks the code in chars.
     val key = String(chars)
-    if (directions.containsKey(key)) continue
-    directions[key] = maskedIsRtl(text, start, chars)
+    record(key, maskedIsRtl(text, start, chars))
   }
+
+  // A plain paragraph is looked up by the same copy, so it must not take a code paragraph's answer.
+  val keyLengths = directions.keys.mapTo(HashSet()) { it.length }
+  var start = 0
+  while (start < text.length) {
+    val end = paragraphEnd(text, start)
+    if (start !in codeParagraphs && (end - start) in keyLengths) {
+      val chars = paragraphCopy(text, start, end)
+      val key = String(chars)
+      // Only a clash matters; an unmatched plain paragraph is counted on lookup, not kept.
+      if (directions.containsKey(key)) {
+        val isRtl = wordMajorityIsRtl(CharBuffer.wrap(chars), 0, chars.size)
+        if (directions[key] != isRtl) ambiguous.add(key)
+      }
+    }
+    start = end
+  }
+  directions.keys.removeAll(ambiguous)
   return directions
+}
+
+/** The end of the paragraph holding [index], after its newline. */
+private fun paragraphEnd(
+  text: CharSequence,
+  index: Int,
+): Int {
+  var end = index
+  while (end < text.length && text[end] != '\n') end++
+  return if (end < text.length) end + 1 else end
 }
 
 /** Word majority of [text] in [start, end) with inline code read as whitespace. */

@@ -43,7 +43,7 @@ First-strong reads an Arabic or Hebrew paragraph that opens with an English word
 - A word takes the direction of its first letter; words without letters (numbers, punctuation, emoji) don't count.
 - Each sentence follows most of its words, and the paragraph follows most of its sentences, so one long English sentence cannot outvote the Arabic ones around it. Sentences end at `.`, `!`, `?` or `؟` followed by whitespace (not the dot in "e.g." or "i.e.").
 - A tie between sentences goes to the paragraph's word count, then to its first word.
-- Inline code doesn't count: it reads as whitespace, so a command quoted in Arabic prose can't outvote it. Link text and URLs count like any other words.
+- Inline code doesn't count: it reads as whitespace, so a command quoted in Arabic prose can't outvote it. Link text and URLs count like any other words. On Android, paragraphs of one text that share the same characters but differ in inline code get one answer that counts every word, code included, because Android passes the direction check only the paragraph's characters.
 - Paragraphs without letters fall back to the layout direction, as with `'first-strong'`. Directional marks (LRM, RLM) are not read.
 
 These are the counting rules of Onicode's desktop client, which feeds them each top-level block (a whole list or quote) rather than each paragraph. The native renderers keep the paragraph as the unit, so a list item or a line inside a quote can go the other way from its neighbours.
