@@ -71,6 +71,16 @@ template <typename T> static inline ENRMSelectionMenuLabels ENRMParseSelectionMe
   };
 }
 
+/// Whether a props update changed the codegen SelectionMenuConfig, so its labels need parsing again.
+template <typename T> static inline bool ENRMSelectionMenuConfigChanged(const T &oldConfig, const T &newConfig)
+{
+  return oldConfig.copyAsMarkdown != newConfig.copyAsMarkdown || oldConfig.copyImageUrl != newConfig.copyImageUrl ||
+         oldConfig.copyLabel != newConfig.copyLabel || oldConfig.copyAsMarkdownLabel != newConfig.copyAsMarkdownLabel ||
+         oldConfig.copyImageUrlLabel != newConfig.copyImageUrlLabel ||
+         oldConfig.copyImageUrlsLabel != newConfig.copyImageUrlsLabel ||
+         oldConfig.copyImageUrlPluralTemplates != newConfig.copyImageUrlPluralTemplates;
+}
+
 /// Builds an ENRMSelectionMenuConfig from pre-parsed labels and boolean flags.
 static inline ENRMSelectionMenuConfig ENRMBuildSelectionMenuConfig(const ENRMSelectionMenuLabels &labels,
                                                                    bool copyAsMarkdown, bool copyImageUrl)

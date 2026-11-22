@@ -136,13 +136,17 @@ const DEFAULT_COPY_IMAGE_URLS_LABEL = 'Copy {count} Image URLs';
  * required `other`. Index 1 uses the singular `label` (the single-image case).
  * Native uses `other` (copyImageUrlsLabel) for counts > 100, and falls back to
  * the singular/`{count}` templates entirely when this returns an empty array
- * (no plural labels set, or `Intl.PluralRules` unavailable).
+ * (no plural labels set, only `other` set, or `Intl.PluralRules` unavailable).
  */
 const buildPluralTemplates = (
   pluralLabels: SelectionMenuPluralLabels | undefined,
   singularLabel: string
 ): string[] => {
   if (!pluralLabels) return [];
+  const { zero, one, two, few, many } = pluralLabels;
+  // `other` alone is native's fallback already: `label` for one image, `other` otherwise.
+  if ([zero, one, two, few, many].every((label) => label === undefined))
+    return [];
 
   const IntlRef = Intl as unknown as {
     PluralRules?: new (locales?: string | string[]) => {

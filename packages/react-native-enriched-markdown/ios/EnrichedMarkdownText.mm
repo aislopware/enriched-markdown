@@ -937,10 +937,13 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
     _contextMenuItemIcons = ENRMContextMenuIconsFromItems(newViewProps.contextMenuItems);
   }
 
-  _selectionMenuLabels = ENRMParseSelectionMenuLabels(newViewProps.selectionMenuConfig);
-  _selectionMenuConfig =
-      ENRMBuildSelectionMenuConfig(_selectionMenuLabels, newViewProps.selectionMenuConfig.copyAsMarkdown,
-                                   newViewProps.selectionMenuConfig.copyImageUrl);
+  // Streaming updates props often; the labels, up to 101 plural templates, rarely change.
+  if (ENRMSelectionMenuConfigChanged(oldViewProps.selectionMenuConfig, newViewProps.selectionMenuConfig)) {
+    _selectionMenuLabels = ENRMParseSelectionMenuLabels(newViewProps.selectionMenuConfig);
+    _selectionMenuConfig =
+        ENRMBuildSelectionMenuConfig(_selectionMenuLabels, newViewProps.selectionMenuConfig.copyAsMarkdown,
+                                     newViewProps.selectionMenuConfig.copyImageUrl);
+  }
 
   if (ENRMAccessibilityLabelsChanged(oldViewProps.accessibilityLabels, newViewProps.accessibilityLabels)) {
     _accessibilityLabels = [[ENRMAccessibilityLabels alloc] init];

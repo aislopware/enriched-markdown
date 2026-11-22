@@ -1899,14 +1899,17 @@ static CGSize ENRMRoundedContentSize(CGSize contentSize, CGFloat width)
     _contextMenuItemIcons = ENRMContextMenuIconsFromItems(newViewProps.contextMenuItems);
   }
 
-  _selectionMenuLabels = ENRMParseSelectionMenuLabels(newViewProps.selectionMenuConfig);
-  _selectionMenuConfig =
-      ENRMBuildSelectionMenuConfig(_selectionMenuLabels, newViewProps.selectionMenuConfig.copyAsMarkdown,
-                                   newViewProps.selectionMenuConfig.copyImageUrl);
-  // Block menu labels live in the shared box; block views read them live at
-  // menu-open. (_selectionMenuLabels also feeds the text selection menu above.)
-  _dynamicBlockProps.copyLabel = _selectionMenuLabels.copyLabel;
-  _dynamicBlockProps.copyAsMarkdownLabel = _selectionMenuLabels.copyAsMarkdownLabel;
+  // Streaming updates props often; the labels, up to 101 plural templates, rarely change.
+  if (ENRMSelectionMenuConfigChanged(oldViewProps.selectionMenuConfig, newViewProps.selectionMenuConfig)) {
+    _selectionMenuLabels = ENRMParseSelectionMenuLabels(newViewProps.selectionMenuConfig);
+    _selectionMenuConfig =
+        ENRMBuildSelectionMenuConfig(_selectionMenuLabels, newViewProps.selectionMenuConfig.copyAsMarkdown,
+                                     newViewProps.selectionMenuConfig.copyImageUrl);
+    // Block menu labels live in the shared box; block views read them live at
+    // menu-open. (_selectionMenuLabels also feeds the text selection menu above.)
+    _dynamicBlockProps.copyLabel = _selectionMenuLabels.copyLabel;
+    _dynamicBlockProps.copyAsMarkdownLabel = _selectionMenuLabels.copyAsMarkdownLabel;
+  }
 
   if (ENRMAccessibilityLabelsChanged(oldViewProps.accessibilityLabels, newViewProps.accessibilityLabels)) {
     _accessibilityLabels = [[ENRMAccessibilityLabels alloc] init];
