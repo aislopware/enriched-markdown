@@ -55,7 +55,7 @@
   [[NSGraphicsContext currentContext] saveGraphicsState];
 
   NSBezierPath *outline = nil;
-  if (_cornerRadius > 0) {
+  if (_cornerRadius > 0 && !_rowLinesOnly) {
     outline = [NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:_cornerRadius yRadius:_cornerRadius];
     [outline setClip];
   }
@@ -68,26 +68,35 @@
 
     for (NSUInteger c = 0; c < rowData.cellTexts.count; c++) {
       CGFloat columnWidth = [_columnWidths[c] doubleValue];
-      NSRect cellRect = NSMakeRect(xOffset, yOffset, columnWidth + _borderWidth, rowHeight + _borderWidth);
+      CGFloat cellOutline = _rowLinesOnly ? 0 : _borderWidth;
+      NSRect cellRect = NSMakeRect(xOffset, yOffset, columnWidth + cellOutline, rowHeight + cellOutline);
 
       [rowData.backgroundColor setFill];
       NSRectFill(cellRect);
 
-      [_borderColor setStroke];
-      NSBezierPath *border = [NSBezierPath bezierPathWithRect:cellRect];
-      border.lineWidth = _borderWidth;
-      [border stroke];
+      if (!_rowLinesOnly) {
+        [_borderColor setStroke];
+        NSBezierPath *border = [NSBezierPath bezierPathWithRect:cellRect];
+        border.lineWidth = _borderWidth;
+        [border stroke];
+      }
 
       NSAttributedString *text = rowData.cellTexts[c];
       if (text.length > 0) {
-        NSRect textRect = NSMakeRect(xOffset + _horizontalCellPadding, yOffset + _verticalCellPadding,
-                                     columnWidth - _horizontalCellPadding * 2, rowHeight - _verticalCellPadding * 2);
+        CGFloat leftPadding = (_rowLinesOnly && c == 0) ? 0 : _horizontalCellPadding;
+        CGFloat rightPadding = (_rowLinesOnly && c + 1 == _columnWidths.count) ? 0 : _horizontalCellPadding;
+        NSRect textRect = NSMakeRect(xOffset + leftPadding, yOffset + _verticalCellPadding,
+                                     columnWidth - leftPadding - rightPadding, rowHeight - _verticalCellPadding * 2);
         [text drawWithRect:textRect
                    options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
                    context:nil];
       }
 
       xOffset += columnWidth;
+    }
+    if (_rowLinesOnly && _borderWidth > 0 && r + 1 < _tableRows.count) {
+      [_borderColor setFill];
+      NSRectFill(NSMakeRect(0, yOffset + rowHeight - _borderWidth, xOffset, _borderWidth));
     }
     yOffset += rowHeight;
   }

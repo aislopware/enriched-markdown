@@ -109,6 +109,8 @@ ENRMRenderResult *ENRMRenderASTNodesResuming(NSArray<MarkdownASTNode *> *nodes, 
   context.allowFontScaling = allowFontScaling;
   context.maxFontSizeMultiplier = maxFontSizeMultiplier;
   context.taskItemCount = previous.blockTaskStarts[from].integerValue;
+  // Items before `from` keep their indents; the tail's own items render theirs over them.
+  [context.liftedIndents addEntriesFromDictionary:previous.context.liftedIndents];
 
   // Positions in `tail` are `start - kResumeSeedLength` ahead of the whole text's.
   const NSInteger offset = (NSInteger)start - (NSInteger)kResumeSeedLength;

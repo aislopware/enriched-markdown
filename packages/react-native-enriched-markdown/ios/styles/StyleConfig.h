@@ -431,6 +431,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setTableHorizontalOverflow:(CGFloat)newValue;
 - (NSString *)tableAlign;
 - (void)setTableAlign:(NSString *)newValue;
+// "rows": lines between rows only, outer columns flush; anything else draws the full grid.
+- (NSString *)tableLines;
+- (void)setTableLines:(NSString *)newValue;
+- (BOOL)tableRowLinesOnly;
 // Task list checkbox properties
 - (RCTUIColor *)taskListCheckedColor;
 - (void)setTaskListCheckedColor:(RCTUIColor *)newValue;

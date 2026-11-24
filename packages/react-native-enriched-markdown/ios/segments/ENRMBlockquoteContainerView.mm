@@ -264,6 +264,7 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                                   s.onImagePress(url, altText);
                               };
                             }
+                            view.lift = segment.tableSegment.lift;
                             [view applyTableNode:segment.tableSegment.tableNode];
                             return view;
                           }
@@ -274,6 +275,7 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                               tableView.writingDirectionMode = strongSelf.writingDirectionMode;
                               tableView.resolvedLayoutDirection = strongSelf.resolvedLayoutDirection;
                             }
+                            tableView.lift = segment.tableSegment.lift;
                             [tableView applyTableNode:segment.tableSegment.tableNode];
                           }]];
 

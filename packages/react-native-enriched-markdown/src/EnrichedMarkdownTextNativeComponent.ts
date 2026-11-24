@@ -186,6 +186,7 @@ interface TableStyleInternal extends BaseBlockStyleInternal {
   cellPaddingVertical: CodegenTypes.Float;
   horizontalOverflow: CodegenTypes.Float;
   align: string;
+  lines: string;
 }
 
 interface TaskListStyleInternal {

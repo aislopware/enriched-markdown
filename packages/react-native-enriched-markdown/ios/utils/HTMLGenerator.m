@@ -47,6 +47,8 @@ typedef struct {
   NSInteger depth;
   NSInteger listNumber;
   BOOL isTaskChecked;
+  // Text of the item before it, after a table lifted out of that item: no marker of its own.
+  BOOL isContinuation;
 } ParagraphData;
 
 #pragma mark - Cached Style Config
@@ -398,8 +400,12 @@ static NSData *collectParagraphsData(NSAttributedString *attributedString, NSUIn
     // Hard breaks render as U+2028 and must stay inside their block, so split on paragraphs, not lines.
     NSRange lineRange = [string paragraphRangeForRange:NSMakeRange(currentIndex, 0)];
 
-    ParagraphData para = {
-        .range = lineRange, .type = ParagraphTypeNormal, .depth = 0, .listNumber = 1, .isTaskChecked = NO};
+    ParagraphData para = {.range = lineRange,
+                          .type = ParagraphTypeNormal,
+                          .depth = 0,
+                          .listNumber = 1,
+                          .isTaskChecked = NO,
+                          .isContinuation = NO};
 
     if (lineRange.location < attributedString.length) {
       NSDictionary *attrs = [attributedString attributesAtIndex:lineRange.location effectiveRange:NULL];
@@ -415,6 +421,7 @@ static NSData *collectParagraphsData(NSAttributedString *attributedString, NSUIn
       if (para.type == ParagraphTypeTaskList) {
         para.isTaskChecked = [attrs[TaskCheckedAttribute] boolValue];
       }
+      para.isContinuation = [attrs[ListItemContinuationAttribute] boolValue];
     }
 
     [data appendBytes:&para length:sizeof(ParagraphData)];
@@ -691,6 +698,13 @@ static void handleListItem(NSMutableString *html, ParagraphData *para, NSMutable
   BOOL isTask = (para->type == ParagraphTypeTaskList);
   NSInteger listTypeValue = isOrdered ? 1 : 0;
 
+  // A continuation right after its item's paragraph carries on that item.
+  if (para->isContinuation && state.currentListDepth == depth && [html hasSuffix:@"</li>"]) {
+    [html deleteCharactersInRange:NSMakeRange(html.length - 5, 5)];
+    [html appendFormat:@"<br>%@</li>", inlineContent];
+    return;
+  }
+
   while (state.currentListDepth > depth) {
     NSString *closeTag = ([state.openListTypes.lastObject integerValue] == 1) ? @"</ol>" : @"</ul>";
     [html appendString:closeTag];
@@ -723,8 +737,10 @@ static void handleListItem(NSMutableString *html, ParagraphData *para, NSMutable
     [state.openListTypes addObject:@(listTypeValue)];
   }
 
-  [html appendFormat:@"<li style=\"margin-bottom: %.0fpx; color: %@; font-size: %.0fpx;\">",
-                     styles.listStyleMarginBottom, styles.listStyleColor, styles.listStyleFontSize];
+  NSString *value = isOrdered ? [NSString stringWithFormat:@" value=\"%ld\"", (long)para->listNumber] : @"";
+  NSString *noMarker = (isTask || para->isContinuation) ? @" list-style-type: none;" : @"";
+  [html appendFormat:@"<li%@ style=\"margin-bottom: %.0fpx; color: %@; font-size: %.0fpx;%@\">", value,
+                     styles.listStyleMarginBottom, styles.listStyleColor, styles.listStyleFontSize, noMarker];
 
   if (isTask) {
     CGFloat size = styles.taskCheckboxSize;
@@ -935,7 +951,8 @@ static NSString *alignmentToCSS(NSTextAlignment alignment)
   }
 }
 
-static NSString *styleForCell(BOOL isHeader, NSUInteger rowIndex, StyleConfig *styleConfig, NSTextAlignment alignment)
+static NSString *styleForCell(BOOL isHeader, NSUInteger rowIndex, BOOL isLastRow, StyleConfig *styleConfig,
+                              NSTextAlignment alignment)
 {
   NSString *backgroundColor = isHeader ? colorToCSS(styleConfig.tableHeaderBackgroundColor)
                                        : (rowIndex % 2 == 0 ? colorToCSS(styleConfig.tableRowEvenBackgroundColor)
@@ -943,16 +960,22 @@ static NSString *styleForCell(BOOL isHeader, NSUInteger rowIndex, StyleConfig *s
 
   NSString *textColor = isHeader ? colorToCSS(styleConfig.tableHeaderTextColor) : colorToCSS(styleConfig.tableColor);
 
+  NSString *line = [NSString
+      stringWithFormat:@"%.0fpx solid %@", styleConfig.tableBorderWidth, colorToCSS(styleConfig.tableBorderColor)];
+  // Rows mode draws a line under every row but the last, as the native table does.
+  NSString *border = !styleConfig.tableRowLinesOnly ? [NSString stringWithFormat:@"border: %@;", line]
+                     : isLastRow                    ? @"border: none;"
+                                 : [NSString stringWithFormat:@"border: none; border-bottom: %@;", line];
+
   return [NSString stringWithFormat:
                        @"padding: %.0fpx %.0fpx; "
                         "text-align: %@; "
                         "background-color: %@; "
                         "color: %@; "
-                        "border: %.0fpx solid %@; "
+                        "%@ "
                         "font-weight: %@;",
                        styleConfig.tableCellPaddingVertical, styleConfig.tableCellPaddingHorizontal,
-                       alignmentToCSS(alignment), backgroundColor, textColor, styleConfig.tableBorderWidth,
-                       colorToCSS(styleConfig.tableBorderColor), isHeader ? @"bold" : @"normal"];
+                       alignmentToCSS(alignment), backgroundColor, textColor, border, isHeader ? @"bold" : @"normal"];
 }
 
 static NSString *tableDirAttrFromRows(NSArray<NSArray<NSDictionary *> *> *rows)
@@ -980,16 +1003,23 @@ HTMLString _Nullable generateTableHTML(NSArray<NSArray<NSDictionary *> *> *rows,
 
   NSString *dirAttr = tableDirAttrFromRows(rows);
 
+  const BOOL rowLines = styleConfig.tableRowLinesOnly;
   [htmlOutput appendFormat:
                   @"<table dir=\"%@\" style=\"border-collapse: separate; border-spacing: 0; "
                    "border: %.0fpx solid %@; border-radius: %.0fpx; overflow: hidden; font-size: %.0fpx;\">",
-                  dirAttr, styleConfig.tableBorderWidth, colorToCSS(styleConfig.tableBorderColor),
-                  styleConfig.tableBorderRadius, styleConfig.tableFontSize];
+                  dirAttr, rowLines ? 0 : styleConfig.tableBorderWidth, colorToCSS(styleConfig.tableBorderColor),
+                  rowLines ? 0 : styleConfig.tableBorderRadius, styleConfig.tableFontSize];
 
   BOOL hasOpenedBody = NO;
   NSUInteger bodyRowIndex = 0;
+  NSUInteger lastRowIndex = NSNotFound;
+  for (NSUInteger i = 0; i < rows.count; i++) {
+    if (rows[i].count > 0)
+      lastRowIndex = i;
+  }
 
-  for (NSArray<NSDictionary *> *row in rows) {
+  for (NSUInteger rowIndex = 0; rowIndex < rows.count; rowIndex++) {
+    NSArray<NSDictionary *> *row = rows[rowIndex];
     if (row.count == 0)
       continue;
 
@@ -1012,7 +1042,7 @@ HTMLString _Nullable generateTableHTML(NSArray<NSArray<NSDictionary *> *> *rows,
         attributedText = ENRMAttributedStringByExpandingLinkPills(attributedText, NULL);
 
       NSString *htmlTag = isHeaderCell ? @"th" : @"td";
-      NSString *cellStyle = styleForCell(isHeaderCell, bodyRowIndex, styleConfig, alignment);
+      NSString *cellStyle = styleForCell(isHeaderCell, bodyRowIndex, rowIndex == lastRowIndex, styleConfig, alignment);
 
       [htmlOutput appendFormat:@"<%@ style=\"%@\">", htmlTag, cellStyle];
 

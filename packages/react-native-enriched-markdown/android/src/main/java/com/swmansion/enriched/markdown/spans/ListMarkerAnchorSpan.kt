@@ -31,8 +31,10 @@ class ListMarkerAnchorSpan(
     if (text is Spanned && text.getSpanStart(this) != start) return
 
     // Pass the paragraph origin: drawMarker reconstructs its offset from depth,
-    // matching the x its own span would receive on a plain text line.
-    val originX = if (dir > 0) 0 else layout?.width ?: 0
+    // matching the x its own span would receive on a plain text line, past the quote bars.
+    val quoteMargin =
+      (text as? Spanned)?.getSpans(start, start + 1, BlockquoteSpan::class.java)?.sumOf { it.getLeadingMargin(true) } ?: 0
+    val originX = (if (dir > 0) 0 else layout?.width ?: 0) + quoteMargin * dir
     marker.drawMarkerAt(c, p, originX, dir, top, baseline, bottom, layout, start)
   }
 }

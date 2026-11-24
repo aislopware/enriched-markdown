@@ -8,6 +8,7 @@ export type EmphasisFontStyle = 'normal' | 'italic' | 'oblique' | '';
 
 // empty string means "no table alignment set" (legacy start-aligned placement).
 export type TableAlign = 'left' | 'center' | 'right' | '';
+export type TableLines = 'grid' | 'rows' | '';
 
 // empty string means "legacy sizing" (fill width, no resize-mode handling).
 // resolves to 'cover' when maxHeight/aspectRatio is present.
@@ -197,6 +198,7 @@ interface TableStyleInternal extends BaseBlockStyleInternal {
   cellPaddingVertical: number;
   horizontalOverflow: number;
   align: TableAlign;
+  lines: TableLines;
 }
 
 interface TaskListStyleInternal {

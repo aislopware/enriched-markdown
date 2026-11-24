@@ -1099,7 +1099,7 @@ class EnrichedMarkdown(
           val tableView = view as TableContainerView
           val previousRowCount = tableView.rowCount
           val previousWidths = tableView.shownColumnWidths
-          tableView.applyTableNode(segment.node)
+          SegmentViewCreators.updateTableView(tableView, segment)
           if (fadesArrivals()) {
             tableView.animateNewRows(previousRowCount, BLOCK_FADE_DURATION_MS)
             // A wider cell widens its column smoothly, not in one jump.

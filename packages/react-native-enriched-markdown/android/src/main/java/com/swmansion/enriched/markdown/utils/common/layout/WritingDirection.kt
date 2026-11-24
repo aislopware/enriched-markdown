@@ -110,6 +110,42 @@ class MarkdownTextDirection {
     }
 }
 
+/**
+ * Whether a markdown text view renders the paragraph [start, end) of [text] right to left, by the
+ * rule its heuristic applies; null when the paragraph has nothing to decide by and takes the layout direction.
+ */
+internal fun MarkdownWritingDirection.paragraphIsRtl(
+  text: Spanned,
+  start: Int,
+  end: Int,
+): Boolean? =
+  if (resolvesWordMajority) {
+    proseIsRtl(text, start, end)
+  } else {
+    // Over the copy StaticLayout resolves, where a pill's text is one U+FFFC.
+    firstStrongIsRtl(CharBuffer.wrap(paragraphCopy(text, start, end)), 0, end - start)
+  }
+
+private fun firstStrongIsRtl(
+  text: CharSequence,
+  start: Int,
+  end: Int,
+): Boolean? {
+  var i = start
+  while (i < end) {
+    val codePoint = Character.codePointAt(text, i)
+    when (Character.getDirectionality(codePoint)) {
+      Character.DIRECTIONALITY_LEFT_TO_RIGHT -> return false
+
+      Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+      Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC,
+      -> return true
+    }
+    i += Character.charCount(codePoint)
+  }
+  return null
+}
+
 /** Paragraphs without letters take the layout direction, as with FIRSTSTRONG_LTR / _RTL. */
 private class WordMajorityHeuristic(
   private val defaultIsRtl: Boolean,

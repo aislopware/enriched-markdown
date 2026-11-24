@@ -54,6 +54,15 @@ void ENRMApplyWordMajorityParagraphDirections(NSMutableAttributedString *output,
 /// Falls back to the app's UI layout direction when the style is missing or Natural.
 BOOL ENRMParagraphIsRTL(NSParagraphStyle *_Nullable style);
 
+/// The directions the FirstStrong and WordMajority modes give the paragraph at `paragraphRange` of `text`.
+void ENRMParagraphContentDirections(NSAttributedString *text, NSRange paragraphRange, NSWritingDirection *firstStrong,
+                                    NSWritingDirection *wordMajority);
+
+/// The direction ENRMApplyWritingDirectionMode gives a paragraph with those content directions, Natural
+/// resolved to `layoutDirection`.
+NSWritingDirection ENRMDirectionForMode(ENRMWritingDirectionMode mode, NSWritingDirection firstStrong,
+                                        NSWritingDirection wordMajority, NSWritingDirection layoutDirection);
+
 /// Dispatch entry point used after every render pass. `layoutDirection` is the
 /// fallback for FirstStrong and WordMajority neutral paragraphs and is unused for the other modes.
 void ENRMApplyWritingDirectionMode(NSMutableAttributedString *output, ENRMWritingDirectionMode mode,

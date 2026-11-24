@@ -4,6 +4,7 @@
 #import "ParagraphStyleUtils.h"
 #import "StyleConfig.h"
 
+@class ENRMLiftedIndent;
 @class MarkdownASTNode;
 @class ENRMAccessibilityLabels;
 
@@ -43,6 +44,10 @@ typedef void (^TableLinkPressBlock)(NSString *url);
 @property (nonatomic, copy, nullable) void (^onImagePress)(NSString *url, NSString *altText);
 
 @property (nonatomic, assign) BOOL enableLinkPreview;
+
+/// Set for a table from a list item: it starts at the item's text indent, on the side the item's text
+/// reads from, and does not overhang into the list's gutter.
+@property (nonatomic, strong, nullable) ENRMLiftedIndent *lift;
 
 @property (nonatomic, assign) ENRMWritingDirectionMode writingDirectionMode;
 @property (nonatomic, assign) NSWritingDirection resolvedLayoutDirection;

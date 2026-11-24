@@ -42,6 +42,9 @@ typedef NS_ENUM(NSInteger, ENRMTableIOSItemKind) {
 @property (nonatomic, copy, nullable) BOOL (^hasLinkContextMenu)(NSString *url);
 - (nullable ENRMTableIOSItemHit *)linkAtPoint:(CGPoint)point;
 
+/// Lines between rows only, no outer border, and the outer columns without padding on their outer side.
+@property (nonatomic, assign) BOOL rowLinesOnly;
+
 - (void)updateWithRows:(NSArray<ENRMTableIOSRowData *> *)rows
              columnWidths:(NSArray<NSNumber *> *)columnWidths
                rowHeights:(NSArray<NSNumber *> *)rowHeights

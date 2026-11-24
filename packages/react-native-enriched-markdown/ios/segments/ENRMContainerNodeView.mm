@@ -38,6 +38,30 @@
   return [_segmentViews copy];
 }
 
+- (BOOL)containsTable
+{
+  for (RCTUIView *view in _segmentViews) {
+    if ([view isKindOfClass:[TableContainerView class]] ||
+        ([view isKindOfClass:[ENRMContainerNodeView class]] && ((ENRMContainerNodeView *)view).containsTable))
+      return YES;
+  }
+  return NO;
+}
+
+#if !TARGET_OS_OSX
+// A table's overhang reaches past this view's bounds and must still take touches.
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event
+{
+  if ([super pointInside:point withEvent:event])
+    return YES;
+  for (RCTUIView *view in _segmentViews) {
+    if ([view pointInside:[self convertPoint:point toView:view] withEvent:event])
+      return YES;
+  }
+  return NO;
+}
+#endif
+
 #if !TARGET_OS_OSX
 // Subviews are in attach order, which drifts from document order once the
 // reconciler reuses views; _segmentViews is the document order.
@@ -200,7 +224,11 @@
     CGFloat height = [self heightForView:view atWidth:contentWidth shouldAddBottomMargin:shouldAddBottomMargin];
 
     if (applyFrames) {
-      view.frame = CGRectMake(_contentInsets.left, yOffset, contentWidth, height);
+      // A table overhangs the content column by the overflow on both sides, as at the root.
+      CGFloat overhang = [view isKindOfClass:[TableContainerView class]]
+                             ? MAX(((TableContainerView *)view).config.tableHorizontalOverflow, 0)
+                             : 0;
+      view.frame = CGRectMake(_contentInsets.left - overhang, yOffset, contentWidth + overhang * 2, height);
     }
 
     yOffset += height;

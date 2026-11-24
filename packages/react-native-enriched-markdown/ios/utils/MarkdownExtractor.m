@@ -365,7 +365,14 @@ NSString *_Nullable extractMarkdownFromAttributedString(NSAttributedString *attr
                           NSMutableString *prefixedSegment = [NSMutableString string];
 
                           if (listDepthNum && ![text hasPrefix:@"\n"]) {
-                            if (isTaskItem) {
+                            if ([attrs[ListItemContinuationAttribute] boolValue]) {
+                              BOOL isOrdered = ([listTypeNum integerValue] == 1);
+                              NSInteger itemNumber = listItemNum ? [listItemNum integerValue] : 1;
+                              NSString *marker = buildListPrefix(currentListDepth, isOrdered, itemNumber);
+                              [prefixedSegment appendString:[@"" stringByPaddingToLength:marker.length
+                                                                              withString:@" "
+                                                                         startingAtIndex:0]];
+                            } else if (isTaskItem) {
                               NSString *indent = [@"" stringByPaddingToLength:(currentListDepth * 2)
                                                                    withString:@" "
                                                               startingAtIndex:0];

@@ -9,6 +9,7 @@ import com.swmansion.enriched.markdown.spans.BaseListSpan
 import com.swmansion.enriched.markdown.spans.ListMarkerAnchorSpan
 import com.swmansion.enriched.markdown.spans.OrderedListSpan
 import com.swmansion.enriched.markdown.styles.StyleConfig
+import com.swmansion.enriched.markdown.test.DrawnMarker
 import com.swmansion.enriched.markdown.test.MarkdownRenderTestSupport.render
 import com.swmansion.enriched.markdown.test.MarkdownRenderTestSupport.styleConfig
 import com.swmansion.enriched.markdown.test.MarkerCanvas
@@ -278,6 +279,34 @@ class ListRenderingTest {
     assertEquals(root.right + style.listStyle.marginLeft, anchored.right, 0.01f)
     assertEquals(anchored.right + style.listStyle.marginLeft, leaf.right, 0.01f)
     assertTrue(markers.all { it.left >= 0f })
+  }
+
+  @Test
+  fun anItemOpeningWithASpacerLineDrawsItsMarkerOnItsFirstContentLine() {
+    fun quote(child: MarkdownASTNode) = MarkdownASTNode(MarkdownASTNode.NodeType.Blockquote, children = listOf(child))
+
+    // The numbers on the first content line; a quote's bars are recorded too, off the baseline.
+    fun numbers(
+      padding: Double,
+      block: MarkdownASTNode,
+      rtl: Boolean = false,
+    ): List<DrawnMarker> {
+      val style = styleConfig(list = mapOf("fontFamily" to "monospace"), blockquote = mapOf("padding" to padding))
+      val text = SpannableString(render(style, orderedList(listItem(block), start = 1)))
+      val layout = MarkerCanvas.layout(text, style.listStyle.fontSize, rtl)
+      val line = layout.getLineForOffset(text.indexOfFirst { it != '\n' })
+      return MarkerCanvas.drawMarkers(layout).filter { it.baseline == layout.getLineBaseline(line).toFloat() }
+    }
+
+    val quoted = quote(paragraph(text("Quoted")))
+    for (rtl in listOf(false, true)) {
+      // Past the quote's bar, where the item without a spacer line draws it.
+      assertEquals(numbers(0.0, quoted, rtl).single().left, numbers(12.0, quoted, rtl).single().left, 0.01f)
+    }
+    // Spaces that open the line are content: the marker stays on the line's start.
+    assertEquals(1, numbers(12.0, quote(paragraph(text("  spaced")))).size)
+    val code = MarkdownASTNode(MarkdownASTNode.NodeType.CodeBlock, children = listOf(text("  indented\n")))
+    assertEquals(1, numbers(0.0, code).size)
   }
 
   @Test

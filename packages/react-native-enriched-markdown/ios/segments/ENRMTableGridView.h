@@ -20,6 +20,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, copy, nullable) NSMenu *_Nullable (^menuProvider)(void);
 
+/// Lines between rows only, no outer border, and the outer columns without padding on their outer side.
+@property (nonatomic, assign) BOOL rowLinesOnly;
+
 - (void)updateWithRows:(NSArray<ENRMMacOSTableRowData *> *)rows
              columnWidths:(NSArray<NSNumber *> *)columnWidths
                rowHeights:(NSArray<NSNumber *> *)rowHeights

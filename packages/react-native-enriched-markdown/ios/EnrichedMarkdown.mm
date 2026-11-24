@@ -635,7 +635,8 @@ static CGSize ENRMRoundedContentSize(CGSize contentSize, CGFloat width)
     BOOL needsOverhang = NO;
     if (overhang > 0) {
       for (RCTUIView *seg in _segmentViews) {
-        if ([seg isKindOfClass:[TableContainerView class]]) {
+        if ([seg isKindOfClass:[TableContainerView class]] ||
+            ([seg isKindOfClass:[ENRMContainerNodeView class]] && ((ENRMContainerNodeView *)seg).containsTable)) {
           needsOverhang = YES;
           break;
         }
@@ -1026,15 +1027,27 @@ static CGSize ENRMRoundedContentSize(CGSize contentSize, CGFloat width)
   }
 }
 
-- (void)pushWritingDirectionToTableSegments
+// Tables in quotes too: a lifted table's side follows the layout direction when its item text has none.
+static void ENRMPushWritingDirection(NSArray<RCTUIView *> *segmentViews, ENRMWritingDirectionMode mode,
+                                     NSWritingDirection layoutDirection)
 {
-  for (RCTUIView *segment in _segmentViews) {
+  for (RCTUIView *segment in segmentViews) {
     if ([segment isKindOfClass:[TableContainerView class]]) {
       TableContainerView *tableView = (TableContainerView *)segment;
-      tableView.writingDirectionMode = _writingDirectionMode;
-      tableView.resolvedLayoutDirection = _resolvedLayoutDirection;
+      tableView.writingDirectionMode = mode;
+      tableView.resolvedLayoutDirection = layoutDirection;
+    } else if ([segment isKindOfClass:[ENRMBlockquoteContainerView class]]) {
+      ENRMBlockquoteContainerView *quote = (ENRMBlockquoteContainerView *)segment;
+      quote.writingDirectionMode = mode;
+      quote.resolvedLayoutDirection = layoutDirection;
+      ENRMPushWritingDirection(quote.segmentViews, mode, layoutDirection);
     }
   }
+}
+
+- (void)pushWritingDirectionToTableSegments
+{
+  ENRMPushWritingDirection(_segmentViews, _writingDirectionMode, _resolvedLayoutDirection);
 }
 
 - (void)pushAccessibilityLabelsToSegments
@@ -1500,6 +1513,7 @@ static CGSize ENRMRoundedContentSize(CGSize contentSize, CGFloat width)
       [strongSelf emitImagePress:url altText:altText];
   };
 
+  tableView.lift = tableSegment.lift;
   [tableView applyTableNode:tableSegment.tableNode];
 
   return tableView;
@@ -1511,6 +1525,7 @@ static CGSize ENRMRoundedContentSize(CGSize contentSize, CGFloat width)
   view.resolvedLayoutDirection = _resolvedLayoutDirection;
   NSUInteger previousRowCount = view.rowCount;
   NSArray<NSNumber *> *previousWidths = view.shownColumnWidths;
+  view.lift = tableSegment.lift;
   [view applyTableNode:tableSegment.tableNode];
 
   if ([self fadesArrivals]) {
@@ -2314,7 +2329,9 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
   }
 
   for (RCTUIView *segment in _segmentViews) {
-    if (CGRectContainsPoint(segment.frame, point)) {
+    if (CGRectContainsPoint(segment.frame, point) || ([segment isKindOfClass:[ENRMContainerNodeView class]] &&
+                                                      [segment pointInside:[self convertPoint:point toView:segment]
+                                                                 withEvent:event])) {
       return YES;
     }
   }

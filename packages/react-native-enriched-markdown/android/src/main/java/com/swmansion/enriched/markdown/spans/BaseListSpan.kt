@@ -43,6 +43,15 @@ abstract class BaseListSpan(
   /** How far an ordered list widened this item's column past the one short lists reserve. */
   internal open val markerExtraWidth: Float = 0f
 
+  /** The rest of an item a lifted table split off: not a list item of its own to accessibility. */
+  internal var continuesItem = false
+
+  /** For a continuation in an ordered list: the number of the item it continues. */
+  internal var continuedNumber: Int? = null
+
+  /** The head of an item that opened with a lifted table: its marker draws on the item's otherwise blank line. */
+  internal var drawsOnBlankLine = false
+
   /** This item's marker column without [markerExtraWidth]; a nested item measures its indent against it. */
   internal open val baselineMarkerWidth: Float get() = getMarkerWidth()
 
@@ -78,7 +87,7 @@ abstract class BaseListSpan(
     layout: Layout?,
   ) {
     if (!drawsMarker) return
-    if (!first || shouldSkipDrawing(text, start) || !hasContent(text, start, end)) return
+    if (!first || shouldSkipDrawing(text, start) || (!drawsOnBlankLine && !hasContent(text, start, end))) return
 
     // Only draw the marker on the true first line of this span.
     // \n inside list item content creates inner paragraphs, each with first=true,

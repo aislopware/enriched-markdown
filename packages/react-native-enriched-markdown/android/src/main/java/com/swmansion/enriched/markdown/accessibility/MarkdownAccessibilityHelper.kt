@@ -555,6 +555,7 @@ class MarkdownAccessibilityHelper(
       spanned
         .getSpans(position, position + 1, BaseListSpan::class.java)
         .maxByOrNull { it.depth } ?: return null
+    if (deepest.continuesItem) return null
 
     if (requireStart) {
       val spanStart = spanned.getSpanStart(deepest)

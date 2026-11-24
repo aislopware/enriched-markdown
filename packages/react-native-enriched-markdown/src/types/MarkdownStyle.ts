@@ -269,6 +269,12 @@ interface TableStyle extends BaseBlockStyle {
    * the container width.
    */
   align?: 'left' | 'center' | 'right';
+  /**
+   * Which lines the table draws. 'grid' (default) borders every cell. 'rows' draws only a line
+   * under each row. On iOS and Android it also leaves out the line under the last row and sets the
+   * outer columns flush with the text around the table (no padding on their outer side).
+   */
+  lines?: 'grid' | 'rows';
 }
 
 interface TaskListStyle {

@@ -250,6 +250,7 @@ const DEFAULT_NORMALIZED_STYLE = Object.freeze({
     cellPaddingVertical: 8,
     horizontalOverflow: 0,
     align: '' as const,
+    lines: '' as const,
   },
   math: {
     fontSize: 20,

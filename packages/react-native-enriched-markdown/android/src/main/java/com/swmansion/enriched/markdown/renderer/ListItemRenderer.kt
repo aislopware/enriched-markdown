@@ -10,8 +10,18 @@ import com.swmansion.enriched.markdown.spans.ListMarkerAnchorSpan
 import com.swmansion.enriched.markdown.spans.OrderedListSpan
 import com.swmansion.enriched.markdown.spans.TaskListSpan
 import com.swmansion.enriched.markdown.spans.UnorderedListSpan
+import com.swmansion.enriched.markdown.utils.common.layout.paragraphIsRtl
 import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE
 import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_LIST_ITEM
+
+/**
+ * Where a table lifted out of a list item starts: the item's content indent, on the side its first
+ * paragraph renders from ([isRtl] null when that falls to the layout direction).
+ */
+data class LiftIndent(
+  val indent: Int,
+  val isRtl: Boolean?,
+)
 
 class ListItemRenderer(
   private val config: RendererConfig,
@@ -27,19 +37,23 @@ class ListItemRenderer(
     val start = builder.length
     val listType = styleContext.listType ?: return
 
+    // The rest of an item a lifted table split: indented and styled as the item, but without a marker,
+    // a number or a task index of its own.
+    val continuation = node.attributes[ListRenderer.CONTINUATION_ATTRIBUTE] == "true"
+    val liftKey = node.attributes[ListRenderer.LIFT_KEY_ATTRIBUTE]
     val isTask = node.attributes["isTask"] == "true"
     val isChecked = isTask && node.attributes["taskChecked"] == "true"
 
-    if (listType == BlockStyleContext.ListType.ORDERED) {
+    if (listType == BlockStyleContext.ListType.ORDERED && !continuation) {
       styleContext.incrementListItemNumber()
     }
 
-    val taskIndex = if (isTask) styleContext.taskItemCount++ else -1
+    val taskIndex = if (isTask && !continuation) styleContext.taskItemCount++ else -1
 
     val depth = styleContext.listDepth - 1
     val listStyle = config.style.listStyle
 
-    fun makeSpan(drawsMarker: Boolean): BaseListSpan =
+    fun makeListSpan(drawsMarker: Boolean): BaseListSpan =
       if (isTask) {
         TaskListSpan(
           taskStyle = config.style.taskListStyle,
@@ -79,10 +93,17 @@ class ListItemRenderer(
               ancestorMarkerOffset = styleContext.ancestorMarkerOffset,
               parentMarkerWidth = styleContext.listItemMarkerWidth,
             ).apply {
-              setItemNumber(styleContext.listItemNumber)
+              // A continuation shows the number of the item it continues, without advancing the count.
+              setItemNumber(styleContext.listItemNumber + if (continuation) 1 else 0)
             }
           }
         }
+      }
+
+    fun makeSpan(drawsMarker: Boolean): BaseListSpan =
+      makeListSpan(drawsMarker && !continuation).also {
+        it.continuesItem = continuation
+        if (continuation && listType == BlockStyleContext.ListType.ORDERED) it.continuedNumber = styleContext.listItemNumber + 1
       }
 
     val markerSpan = makeSpan(drawsMarker = true)
@@ -93,6 +114,7 @@ class ListItemRenderer(
     styleContext.listItemMarkerWidth = markerSpan.baselineMarkerWidth
     val prevIndent = styleContext.accumulatedIndent
     styleContext.accumulatedIndent = prevIndent + markerSpan.getLeadingMargin(false)
+    if (liftKey != null) styleContext.liftIndents[liftKey] = LiftIndent(styleContext.accumulatedIndent, null)
     try {
       factory.renderChildren(node, builder, onLinkPress, onLinkLongPress)
     } finally {
@@ -101,9 +123,34 @@ class ListItemRenderer(
       styleContext.listItemMarkerWidth = previousMarkerWidth
     }
 
-    if (builder.length == start || builder.substring(start).isBlank()) return
+    if (liftKey != null) {
+      // An item that opened with its table keeps a line for its marker. A space, not a bare newline:
+      // a segment's trailing newlines are trimmed, and a kept one would add an empty last line. Not
+      // before a nested head's space, which would push the nested span off its line start.
+      // An empty code block's spacer goes too, or its margin would sit between the marker and the table.
+      if (builder.substring(start).none { it != '\n' }) {
+        builder.delete(start, builder.length)
+        builder.append(" ")
+        markerSpan.drawsOnBlankLine = true
+      }
+      // The first paragraph, past a leading block's top-margin spacer. Code blocks always render left to right.
+      var paragraphStart = start
+      while (builder[paragraphStart] == '\n') paragraphStart++
+      val paragraphEnd = builder.indexOf('\n', paragraphStart).let { if (it < 0) builder.length else it + 1 }
+      val isRtl =
+        if (builder.getSpans(paragraphStart, paragraphEnd, CodeBlockSpan::class.java).isNotEmpty()) {
+          false
+        } else {
+          config.style.writingDirection.paragraphIsRtl(builder, paragraphStart, paragraphEnd)
+        }
+      styleContext.liftIndents[liftKey] = styleContext.liftIndents.getValue(liftKey).copy(isRtl = isRtl)
+    } else if (builder.length == start || (builder.substring(start).isBlank() && !holdsBlankLineMarker(builder, start))) {
+      // An outer item wrapping a nested empty head still takes that line, or the head loses this item's indent.
+      return
+    }
 
-    styleContext.listItemStarts.add(start)
+    // The rest of an item is no item to space from the one before.
+    if (!continuation) styleContext.listItemStarts.add(start)
 
     if (builder.last() != '\n') {
       builder.append("\n")
@@ -111,14 +158,16 @@ class ListItemRenderer(
 
     val itemEnd = builder.length
 
-    // Anchor the marker on the first content character so items that open with
-    // a code block or nested sublist still get their marker.
+    // Anchor the marker on the first content line so items that open with a code block or nested
+    // sublist still get their marker. It draws only from a line's start, so spaces stay.
     var anchor = start
-    while (anchor < itemEnd && builder[anchor].isWhitespace()) anchor++
+    while (anchor < itemEnd && builder[anchor] == '\n') anchor++
     if (anchor == itemEnd) anchor = start
 
+    // A leading block's spacer line is no line for the marker: it anchors on the first content line, as on iOS.
     val plainAnchor =
-      builder.getSpans(anchor, anchor + 1, CodeBlockSpan::class.java).isEmpty() &&
+      builder[start] != '\n' &&
+        builder.getSpans(anchor, anchor + 1, CodeBlockSpan::class.java).isEmpty() &&
         builder.getSpans(anchor, anchor + 1, BaseListSpan::class.java).none { it.depth > depth }
 
     val codeBlockRanges =
@@ -151,7 +200,7 @@ class ListItemRenderer(
       )
     }
 
-    if (!plainAnchor) {
+    if (!plainAnchor && !continuation) {
       builder.setSpan(ListMarkerAnchorSpan(markerSpan), anchor, anchor + 1, SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE)
     }
 
@@ -159,6 +208,11 @@ class ListItemRenderer(
       applyCheckedDecorations(builder, start, itemEnd, depth)
     }
   }
+
+  private fun holdsBlankLineMarker(
+    builder: SpannableStringBuilder,
+    start: Int,
+  ): Boolean = builder.getSpans(start, builder.length, BaseListSpan::class.java).any { it.drawsOnBlankLine }
 
   private fun applyCheckedDecorations(
     builder: SpannableStringBuilder,

@@ -169,7 +169,16 @@ object SegmentViewCreators {
     accessibilityLabels = config.accessibilityLabels
     onLinkPress = config.onLinkPress
     onLinkLongPress = config.onLinkLongPress
-    applyTableNode(segment.node)
+    updateTableView(this, segment)
+  }
+
+  fun updateTableView(
+    view: TableContainerView,
+    segment: RenderedSegment.Table,
+  ) {
+    view.leadingInset = segment.leadingInset
+    view.leadingInsetRtl = segment.leadingInsetRtl
+    view.applyTableNode(segment.node)
   }
 
   fun createCodeBlockView(

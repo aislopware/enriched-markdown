@@ -183,6 +183,24 @@ static CGFloat ENRMTableTextAnchor(NSAttributedString *text)
 
 #pragma mark - Drawing
 
+- (void)setRowLinesOnly:(BOOL)rowLinesOnly
+{
+  if (_rowLinesOnly == rowLinesOnly)
+    return;
+  _rowLinesOnly = rowLinesOnly;
+  [self setNeedsDisplay];
+}
+
+- (CGFloat)leftPaddingOfColumn:(NSUInteger)column
+{
+  return (_rowLinesOnly && column == 0) ? 0 : _horizontalCellPadding;
+}
+
+- (CGFloat)rightPaddingOfColumn:(NSUInteger)column
+{
+  return (_rowLinesOnly && column + 1 == _columnWidths.count) ? 0 : _horizontalCellPadding;
+}
+
 - (void)drawRect:(CGRect)dirtyRect
 {
   if (!_tableRows.count || !_columnWidths.count || !_rowHeights.count)
@@ -212,26 +230,30 @@ static CGFloat ENRMTableTextAnchor(NSAttributedString *text)
     NSUInteger colCount = MIN(rowData.cellTexts.count, _columnWidths.count);
     for (NSUInteger c = 0; c < colCount; c++) {
       CGFloat columnWidth = [shownWidths[c] doubleValue];
-      CGFloat textWidth = [_columnWidths[c] doubleValue] - _horizontalCellPadding * 2;
-      CGRect cellRect = CGRectMake(xOffset, yOffset, columnWidth + _borderWidth, rowHeight + _borderWidth);
+      CGFloat leftPadding = [self leftPaddingOfColumn:c];
+      CGFloat textWidth = [_columnWidths[c] doubleValue] - leftPadding - [self rightPaddingOfColumn:c];
+      CGFloat outline = _rowLinesOnly ? 0 : _borderWidth;
+      CGRect cellRect = CGRectMake(xOffset, yOffset, columnWidth + outline, rowHeight + outline);
 
       [rowData.backgroundColor setFill];
       UIRectFill(cellRect);
 
-      [_borderColor setStroke];
-      UIBezierPath *border = [UIBezierPath bezierPathWithRect:cellRect];
-      border.lineWidth = _borderWidth;
-      [border stroke];
+      if (!_rowLinesOnly) {
+        [_borderColor setStroke];
+        UIBezierPath *border = [UIBezierPath bezierPathWithRect:cellRect];
+        border.lineWidth = _borderWidth;
+        [border stroke];
+      }
 
       NSAttributedString *text = rowData.cellTexts[c];
       if (text.length > 0) {
         // While the column is narrower than laid out, text keeps its side: trailing text its trailing edge.
         CGFloat shift = (columnWidth - [_columnWidths[c] doubleValue]) * ENRMTableTextAnchor(text);
-        CGRect textRect = CGRectMake(xOffset + _horizontalCellPadding + shift, yOffset + _verticalCellPadding,
-                                     textWidth, rowHeight - _verticalCellPadding * 2);
+        CGRect textRect = CGRectMake(xOffset + leftPadding + shift, yOffset + _verticalCellPadding, textWidth,
+                                     rowHeight - _verticalCellPadding * 2);
         if (widthsAnimate) {
           CGContextSaveGState(context);
-          CGContextClipToRect(context, CGRectInset(cellRect, _borderWidth, _borderWidth));
+          CGContextClipToRect(context, CGRectInset(cellRect, outline, outline));
         }
         [text drawWithRect:textRect
                    options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
@@ -243,6 +265,10 @@ static CGFloat ENRMTableTextAnchor(NSAttributedString *text)
 
       xOffset += columnWidth;
     }
+    if (_rowLinesOnly && _borderWidth > 0 && r + 1 < _tableRows.count) {
+      [_borderColor setFill];
+      UIRectFill(CGRectMake(0, yOffset + rowHeight - _borderWidth, xOffset, _borderWidth));
+    }
     if (fading) {
       CGContextRestoreGState(context);
     }
@@ -250,7 +276,7 @@ static CGFloat ENRMTableTextAnchor(NSAttributedString *text)
   }
 
   // The container's corner mask cuts the square cell strokes; draw the arcs.
-  if (_cornerRadius > 0 && _borderWidth > 0) {
+  if (!_rowLinesOnly && _cornerRadius > 0 && _borderWidth > 0) {
     [_borderColor setStroke];
     UIBezierPath *outline = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:_cornerRadius];
     outline.lineWidth = _borderWidth;
@@ -265,6 +291,7 @@ static CGFloat ENRMTableTextAnchor(NSAttributedString *text)
           rowHeight:(out CGFloat *)outRowH
           colOrigin:(out CGFloat *)outColX
            colWidth:(out CGFloat *)outColW
+             column:(out NSUInteger *)outCol
            cellText:(out NSAttributedString *__autoreleasing *)outText
 {
   CGFloat rowY = 0;
@@ -282,6 +309,7 @@ static CGFloat ENRMTableTextAnchor(NSAttributedString *text)
           *outRowH = rh;
           *outColX = colX;
           *outColW = cw;
+          *outCol = c;
           *outText = rowData.cellTexts[c];
           return YES;
         }
@@ -344,12 +372,21 @@ static ENRMTableIOSItemHit *itemInAttributedString(NSAttributedString *text, CGR
 - (ENRMTableIOSItemHit *)itemAtPoint:(CGPoint)point
 {
   CGFloat rowY, rowH, colX, colW;
+  NSUInteger column;
   NSAttributedString *text;
-  if (![self cellAtPoint:point rowOrigin:&rowY rowHeight:&rowH colOrigin:&colX colWidth:&colW cellText:&text])
+  if (![self cellAtPoint:point
+               rowOrigin:&rowY
+               rowHeight:&rowH
+               colOrigin:&colX
+                colWidth:&colW
+                  column:&column
+                cellText:&text])
     return nil;
 
-  CGRect textRect = CGRectMake(colX + _horizontalCellPadding, rowY + _verticalCellPadding,
-                               colW - _horizontalCellPadding * 2, rowH - _verticalCellPadding * 2);
+  CGFloat leftPadding = [self leftPaddingOfColumn:column];
+  CGRect textRect =
+      CGRectMake(colX + leftPadding, rowY + _verticalCellPadding,
+                 colW - leftPadding - [self rightPaddingOfColumn:column], rowH - _verticalCellPadding * 2);
   if (!CGRectContainsPoint(textRect, point))
     return nil;
 

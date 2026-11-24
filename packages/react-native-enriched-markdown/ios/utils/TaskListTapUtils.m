@@ -158,6 +158,14 @@ BOOL updateTaskListItemCheckedState(ENRMPlatformTextView *textView, NSInteger ta
   if (targetItemRange.location == NSNotFound)
     return NO;
 
+  __block BOOL lifted = NO;
+  [originalText enumerateAttribute:ListItemLiftedAttribute
+                           inRange:targetItemRange
+                           options:0
+                        usingBlock:^(NSNumber *value, NSRange range, BOOL *stop) { lifted = *stop = value.boolValue; }];
+  if (lifted)
+    return NO;
+
   NSDictionary *attrs = [originalText attributesAtIndex:targetItemRange.location effectiveRange:NULL];
   NSInteger nestingLevel = [attrs[ListDepthAttribute] integerValue] ?: 0;
 

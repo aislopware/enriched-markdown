@@ -328,7 +328,7 @@ class BlockquoteContainerView(
     ) {
       when (segment) {
         is RenderedSegment.Text -> SegmentViewCreators.updateTextView(view as EnrichedMarkdownInternalText, segment)
-        is RenderedSegment.Table -> (view as TableContainerView).applyTableNode(segment.node)
+        is RenderedSegment.Table -> SegmentViewCreators.updateTableView(view as TableContainerView, segment)
         is RenderedSegment.Math -> SegmentViewCreators.updateMathView(view, segment)
         is RenderedSegment.CodeBlock -> (view as CodeBlockContainerView).applyCodeBlockNode(segment.node)
         is RenderedSegment.Blockquote -> (view as BlockquoteContainerView).applyBlockquoteNode(segment.node, segment.taskIndexOffset)

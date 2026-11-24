@@ -2,6 +2,7 @@
 
 #import <Foundation/Foundation.h>
 
+@class ENRMLiftedIndent;
 @class ENRMRenderResult;
 @class MarkdownASTNode;
 
@@ -31,6 +32,10 @@ typedef NS_ENUM(NSInteger, ENRMBlockSlotKind) {
 
 @interface ENRMTableSegment : NSObject
 @property (nonatomic, strong) MarkdownASTNode *tableNode;
+// Set when the table was lifted out of a list item: the key of that item's ENRMLiftedIndent.
+@property (nonatomic, copy, nullable) NSString *liftKey;
+// That item's ENRMLiftedIndent: the table starts at its text indent, on the side its text reads from.
+@property (nonatomic, strong, nullable) ENRMLiftedIndent *lift;
 + (instancetype)segmentWithTableNode:(MarkdownASTNode *)node;
 @end
 

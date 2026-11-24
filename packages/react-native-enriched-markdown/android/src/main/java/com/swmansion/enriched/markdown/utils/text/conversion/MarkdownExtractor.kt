@@ -279,11 +279,18 @@ object MarkdownExtractor {
     state.listDepth = listSpan.depth
     val indent = "  ".repeat(listSpan.depth)
 
-    return when (listSpan) {
-      is TaskListSpan -> "$indent- ${if (listSpan.isChecked) "[x]" else "[ ]"} "
-      is OrderedListSpan -> "$indent${listSpan.itemNumber}. "
-      else -> "$indent- "
+    // Text after a table lifted out of an item continues that item: indented past the list marker,
+    // never past a task's checkbox too, which would make it an indented code block.
+    if (listSpan.continuesItem) {
+      val markerLength = listSpan.continuedNumber?.let { "$it. ".length } ?: "- ".length
+      return indent + " ".repeat(markerLength)
     }
+    return indent +
+      when (listSpan) {
+        is TaskListSpan -> "- ${if (listSpan.isChecked) "[x]" else "[ ]"} "
+        is OrderedListSpan -> "${listSpan.itemNumber}. "
+        else -> "- "
+      }
   }
 
   private fun applyInlineFormatting(

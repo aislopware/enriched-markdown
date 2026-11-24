@@ -438,7 +438,10 @@ function tableStyle(style: MarkdownStyleInternal): CSSProperties {
     fontWeight: normalizeFontWeight(table.fontWeight),
     color: table.color,
     lineHeight: `${table.lineHeight}px`,
-    border: `${table.borderWidth}px solid ${table.borderColor}`,
+    border:
+      table.lines === 'rows'
+        ? 'none'
+        : `${table.borderWidth}px solid ${table.borderColor}`,
   };
 }
 
@@ -504,6 +507,10 @@ export function tableBodyRowStyle(
       rowIndex % 2 === 0
         ? table.rowEvenBackgroundColor
         : table.rowOddBackgroundColor,
+    // Every body row follows the header or another row, so the line above it is the line between rows.
+    ...(table.lines === 'rows'
+      ? { borderTop: `${table.borderWidth}px solid ${table.borderColor}` }
+      : null),
   };
 }
 
@@ -529,8 +536,15 @@ function tableWrapperStyle(style: MarkdownStyleInternal): CSSProperties {
     ...alignment,
     // borderRadius must live on the wrapper, not the <table> — border-collapse:
     // collapse causes browsers to ignore border-radius on the table element itself.
-    borderRadius: table.borderRadius,
+    borderRadius: table.lines === 'rows' ? 0 : table.borderRadius,
   };
+}
+
+// In 'rows' mode the body rows draw the lines (tableBodyRowStyle).
+function tableCellBorder(table: MarkdownStyleInternal['table']): CSSProperties {
+  return table.lines === 'rows'
+    ? { border: 'none' }
+    : { border: `${table.borderWidth}px solid ${table.borderColor}` };
 }
 
 function tableHeaderCellStyle(
@@ -546,7 +560,7 @@ function tableHeaderCellStyle(
       normalizeFontFamily(table.fontFamily),
     fontWeight: 'bold',
     padding: `${table.cellPaddingVertical}px ${table.cellPaddingHorizontal}px`,
-    border: `${table.borderWidth}px solid ${table.borderColor}`,
+    ...tableCellBorder(table),
     textAlign: resolveColumnAlign(align),
   };
 }
@@ -558,7 +572,7 @@ function tableCellStyle(
   const table = style.table;
   return {
     padding: `${table.cellPaddingVertical}px ${table.cellPaddingHorizontal}px`,
-    border: `${table.borderWidth}px solid ${table.borderColor}`,
+    ...tableCellBorder(table),
     textAlign: resolveColumnAlign(align),
   };
 }

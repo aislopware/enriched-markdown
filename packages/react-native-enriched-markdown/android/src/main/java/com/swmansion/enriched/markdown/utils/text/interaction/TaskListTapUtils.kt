@@ -66,7 +66,9 @@ object TaskListTapUtils {
             layout.getLineStart(line),
             layout.getLineEnd(line),
             TaskListSpan::class.java,
-          ).maxByOrNull { it.depth } ?: return null
+          ).maxByOrNull { it.depth }
+          // A continuation of a task item (taskIndex -1) has no checkbox to tap.
+          ?.takeIf { it.taskIndex >= 0 } ?: return null
 
       val isRtl = layout.getParagraphDirection(line) == android.text.Layout.DIR_RIGHT_TO_LEFT
       if (isRtl) {

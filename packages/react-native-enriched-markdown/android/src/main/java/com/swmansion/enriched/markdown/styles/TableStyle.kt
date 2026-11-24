@@ -22,7 +22,14 @@ data class TableStyle(
   val cellPaddingVertical: Float,
   val horizontalOverflow: Float,
   val align: String,
+  val lines: String,
 ) : BaseBlockStyle {
+  /** Only lines between rows: no outer border, columns or rounded corners. */
+  val rowLinesOnly: Boolean get() = lines == "rows"
+
+  /** What an outer border adds to the table's width and height. */
+  val outerBorderWidth: Float get() = if (rowLinesOnly) 0f else borderWidth
+
   companion object {
     fun fromReadableMap(
       map: ReadableMap,
@@ -48,6 +55,7 @@ data class TableStyle(
       val cellPaddingVertical = parser.toPixelFromDIP(map.getDouble("cellPaddingVertical").toFloat())
       val horizontalOverflow = parser.toPixelFromDIP(map.getDouble("horizontalOverflow").toFloat())
       val align = parser.parseString(map, "align")
+      val lines = parser.parseString(map, "lines")
 
       return TableStyle(
         fontSize = fontSize,
@@ -69,6 +77,7 @@ data class TableStyle(
         cellPaddingVertical = cellPaddingVertical,
         horizontalOverflow = horizontalOverflow,
         align = align,
+        lines = lines,
       )
     }
   }

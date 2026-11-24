@@ -186,19 +186,29 @@ open class ContainerNodeView(
     return result.viewsToAttach.isNotEmpty() || result.viewsToRemove.isNotEmpty()
   }
 
+  // A table overhangs into its container's padding: every container above it, not only its own, must not clip it.
+  private fun holdsOverhangingTable(): Boolean =
+    segmentViews.any { view ->
+      when (view) {
+        is TableContainerView -> ceil(view.tableStyle.horizontalOverflow.toDouble()).toInt() > 0
+        is ContainerNodeView -> view.holdsOverhangingTable()
+        else -> false
+      }
+    }
+
   protected open fun layoutSegments() {
     val containerWidth = width
     if (containerWidth <= 0) return
 
     val contentWidth = (containerWidth - paddingLeft - paddingRight).coerceAtLeast(0)
 
-    val needsOverhang =
-      segmentViews.any { view ->
-        view is TableContainerView &&
-          ceil(view.tableStyle.horizontalOverflow.toDouble()).toInt() > 0
-      }
+    val needsOverhang = holdsOverhangingTable()
     if (clipChildren == needsOverhang) {
       clipChildren = !needsOverhang
+    }
+    // The overhang reaches into the horizontal padding, which clipToPadding clips on its own.
+    if (clipToPadding == needsOverhang) {
+      clipToPadding = !needsOverhang
     }
 
     var currentY = paddingTop

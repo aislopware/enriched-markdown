@@ -1,5 +1,6 @@
 #import "ListRenderer.h"
 #import "BlockquoteRenderer.h"
+#import "ListItemRenderer.h"
 #import "MarkdownASTNode.h"
 #import "ParagraphStyleUtils.h"
 #import "RenderContext.h"
@@ -8,9 +9,10 @@
 
 // Inserts the configured vertical gap between consecutive list items (including
 // nested ones) by raising paragraphSpacing on the paragraph preceding each item
-// start. The first item of the root list gets no spacing above it.
+// start. The first item of the root list gets no spacing above it, unless the list continues one split
+// around a lifted table (spacedFirst) and has text before it.
 static void applyListItemSpacing(NSMutableAttributedString *output, RenderContext *context, NSUInteger listStart,
-                                 CGFloat itemSpacing)
+                                 CGFloat itemSpacing, BOOL spacedFirst)
 {
   if (itemSpacing <= 0)
     return;
@@ -22,13 +24,10 @@ static void applyListItemSpacing(NSMutableAttributedString *output, RenderContex
       [itemStarts addIndex:location];
     }
   }
-  if (itemStarts.count < 2)
-    return;
-
   NSString *string = output.string;
   const NSUInteger firstStart = itemStarts.firstIndex;
   [itemStarts enumerateIndexesUsingBlock:^(NSUInteger itemStart, BOOL *stop) {
-    if (itemStart == firstStart)
+    if (itemStart == 0 || (itemStart == firstStart && !spacedFirst))
       return;
     NSRange prevParagraph = [string paragraphRangeForRange:NSMakeRange(itemStart - 1, 0)];
     [output enumerateAttribute:NSParagraphStyleAttributeName
@@ -72,9 +71,13 @@ static void applyListItemSpacing(NSMutableAttributedString *output, RenderContex
   const NSInteger prevDepth = context.listDepth;
   const NSUInteger startLocation = output.length;
 
+  const BOOL noMarginTop = [node.attributes[ENRMListNoMarginTopNodeAttribute] isEqualToString:@"true"];
+  const BOOL noMarginBottom = [node.attributes[ENRMListNoMarginBottomNodeAttribute] isEqualToString:@"true"];
   if (prevDepth == 0) {
     // Apply top margin for root-level list
-    applyBlockSpacingBefore(output, startLocation, _config.listStyleMarginTop);
+    if (!noMarginTop) {
+      applyBlockSpacingBefore(output, startLocation, _config.listStyleMarginTop);
+    }
   } else if (output.length > 0 && ![output.string hasSuffix:@"\n"]) {
     // Ensure nested lists start on a new line
     [output appendAttributedString:kNewlineAttributedString];
@@ -106,6 +109,11 @@ static void applyListItemSpacing(NSMutableAttributedString *output, RenderContex
       }
       number++;
     }
+    // A list split around a lifted table keeps the gutter of its widest number.
+    const NSInteger markerNumber = [node.attributes[ENRMListMarkerNumberNodeAttribute] integerValue];
+    if (markerNumber >= 100) {
+      context.listMarkerWidth = MAX(context.listMarkerWidth, [_config effectiveListMarginLeftForNumber:markerNumber]);
+    }
   }
   context.listMarkerExtra = context.listMarkerWidth - defaultMarkerWidth;
 
@@ -117,9 +125,11 @@ static void applyListItemSpacing(NSMutableAttributedString *output, RenderContex
   [_rendererFactory renderChildrenOfNode:node into:output context:context];
 
   if (prevDepth == 0) {
-    applyListItemSpacing(output, context, startLocation, [_config listStyleItemSpacing]);
+    applyListItemSpacing(output, context, startLocation, [_config listStyleItemSpacing], noMarginTop);
     // Apply bottom margin for root-level list
-    applyBlockSpacingAfter(output, _config.listStyleMarginBottom);
+    if (!noMarginBottom) {
+      applyBlockSpacingAfter(output, _config.listStyleMarginBottom);
+    }
   }
 }
 

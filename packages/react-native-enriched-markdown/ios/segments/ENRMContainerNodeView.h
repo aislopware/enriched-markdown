@@ -42,6 +42,9 @@ NS_ASSUME_NONNULL_BEGIN
 // The current child views in document order.
 @property (nonatomic, readonly) NSArray<RCTUIView *> *segmentViews;
 
+// Whether a table sits anywhere in this subtree. Its overhang reaches past this view, so the root must not clip it.
+@property (nonatomic, readonly) BOOL containsTable;
+
 // Reconciles the current child views against renderedSegments, attaching and
 // removing subviews as needed. Requests a re-layout.
 - (void)applySegments:(NSArray<ENRMRenderedSegment *> *)renderedSegments reset:(BOOL)reset;

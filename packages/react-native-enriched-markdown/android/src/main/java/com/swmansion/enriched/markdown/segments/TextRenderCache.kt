@@ -4,6 +4,7 @@ import android.text.NoCopySpan
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import com.swmansion.enriched.markdown.parser.MarkdownASTNode
+import com.swmansion.enriched.markdown.renderer.LiftIndent
 import com.swmansion.enriched.markdown.renderer.ListRenderer
 import com.swmansion.enriched.markdown.renderer.Renderer
 import com.swmansion.enriched.markdown.spans.ImageSpan
@@ -35,6 +36,7 @@ class TextRenderResult(
   // The items of the last top-level list rendered, as [blockStarts] does for nodes.
   val listItemStarts: IntArray = IntArray(0),
   val listItemTaskStarts: IntArray = IntArray(0),
+  val liftIndents: Map<String, LiftIndent> = emptyMap(),
 )
 
 /** [styledText], just rendered by this renderer, with what the renderer collected along. */
@@ -51,6 +53,7 @@ fun Renderer.textRenderResult(
   blockTaskStarts = getBlockTaskStarts(),
   listItemStarts = getTopLevelListItemStarts(),
   listItemTaskStarts = getTopLevelListItemTaskStarts(),
+  liftIndents = getLiftIndents(),
 )
 
 /**
@@ -285,6 +288,7 @@ class TextRenderCache {
         signature = signatureOf(base, startingTaskIndex, tail.taskItemCount),
         revision = nextRevision(),
         patch = TextPatch(old.entry.segment.revision, start, tail.styledText, tailImageSpans),
+        liftIndents = old.entry.segment.liftIndents + tail.liftIndents,
       )
     val entry = Entry(rendered, base, startingTaskIndex, tail.taskItemCount)
     growing =
@@ -389,6 +393,7 @@ class TextRenderCache {
       lastElementMarginBottom = text.lastElementMarginBottom,
       signature = signatureOf(base, startingTaskIndex, text.taskItemCount),
       revision = nextRevision(),
+      liftIndents = text.liftIndents,
     )
   }
 }

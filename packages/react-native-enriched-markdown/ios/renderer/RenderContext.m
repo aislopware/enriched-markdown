@@ -3,6 +3,9 @@
 #import "FontUtils.h"
 #import <React/RCTFont.h>
 
+@implementation ENRMLiftedIndent
+@end
+
 @implementation BlockStyle
 @end
 
@@ -55,6 +58,7 @@ static NSArray<NSString *> *ENRMScopedKeyPaths(void)
     _listItemDepths = [NSMutableArray array];
     _listItemOrdered = [NSMutableArray array];
     _mathReporters = [NSMutableArray array];
+    _liftedIndents = [NSMutableDictionary dictionary];
     _fontCache = [NSMutableDictionary dictionary];
     _currentBlockStyle = [[BlockStyle alloc] init];
     _allowFontScaling = YES;
@@ -307,6 +311,7 @@ static NSArray<NSString *> *ENRMScopedKeyPaths(void)
   [_imageAltTexts removeAllObjects];
   [_imageURLs removeAllObjects];
   [_listItemRanges removeAllObjects];
+  [_liftedIndents removeAllObjects];
   [_listItemPositions removeAllObjects];
   [_listItemDepths removeAllObjects];
   [_listItemOrdered removeAllObjects];

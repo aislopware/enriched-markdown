@@ -1136,6 +1136,11 @@ BOOL applyMarkdownStyleToConfig(StyleConfig *config, const MarkdownStyle &newSty
     changed = YES;
   }
 
+  if (newStyle.table.lines != oldStyle.table.lines) {
+    [config setTableLines:@(newStyle.table.lines.c_str())];
+    changed = YES;
+  }
+
   // ── Task List ───────────────────────────────────────────────────────────────
 
   if (newStyle.taskList.checkedColor != oldStyle.taskList.checkedColor) {

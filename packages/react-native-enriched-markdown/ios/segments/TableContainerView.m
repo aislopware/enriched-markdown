@@ -182,6 +182,23 @@ static NSArray<NSArray<TableCellData *> *> *ENRMTableBuildRows(MarkdownASTNode *
   return [allRows copy];
 }
 
+// The padding a cell of `column` has on its left and right. With row lines only, the outer columns sit
+// flush with the text around the table.
+static void ENRMTableCellPadding(StyleConfig *config, NSUInteger column, NSUInteger colCount, CGFloat *left,
+                                 CGFloat *right)
+{
+  const CGFloat padding = config.tableCellPaddingHorizontal;
+  const BOOL flush = config.tableRowLinesOnly;
+  *left = (flush && column == 0) ? 0 : padding;
+  *right = (flush && column + 1 == colCount) ? 0 : padding;
+}
+
+// The outer border a grid adds to the table's size; row lines only draw none.
+static CGFloat ENRMTableOuterBorder(StyleConfig *config)
+{
+  return config.tableRowLinesOnly ? 0 : config.tableBorderWidth;
+}
+
 static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NSUInteger colCount, StyleConfig *config,
                                    CGFloat borderWidth, NSMutableArray<NSNumber *> *_Nullable *_Nullable outColWidths,
                                    NSMutableArray<NSNumber *> *_Nullable *_Nullable outRowHeights,
@@ -190,7 +207,6 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   // TODO: Consider making minColumnWidth / maxColumnWidth configurable via style props
   const CGFloat minimumColumnWidth = 60.0;
   const CGFloat maximumColumnWidth = 300.0;
-  const CGFloat horizontalPadding = config.tableCellPaddingHorizontal * 2;
   const CGFloat verticalPadding = config.tableCellPaddingVertical * 2;
 
   NSMutableArray<NSNumber *> *colWidths = [NSMutableArray arrayWithCapacity:colCount];
@@ -199,6 +215,9 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
 
   for (NSArray<TableCellData *> *row in rows) {
     for (NSUInteger column = 0; column < row.count; column++) {
+      CGFloat left, right;
+      ENRMTableCellPadding(config, column, colCount, &left, &right);
+      const CGFloat horizontalPadding = left + right;
       CGRect boundingRect = [row[column].attributedText
           boundingRectWithSize:CGSizeMake(maximumColumnWidth, CGFLOAT_MAX)
                        options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
@@ -214,7 +233,9 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   for (NSArray<TableCellData *> *row in rows) {
     CGFloat maxHeight = 0;
     for (NSUInteger column = 0; column < row.count; column++) {
-      CGFloat availableWidth = [colWidths[column] doubleValue] - horizontalPadding;
+      CGFloat left, right;
+      ENRMTableCellPadding(config, column, colCount, &left, &right);
+      CGFloat availableWidth = [colWidths[column] doubleValue] - left - right;
       CGRect boundingRect = [row[column].attributedText
           boundingRectWithSize:CGSizeMake(availableWidth, CGFLOAT_MAX)
                        options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
@@ -286,6 +307,8 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   CADisplayLink *_widthsLink;
 
   NSArray *_cachedAccessibilityElements;
+  // The grid frame the cached elements were laid out for; they rebuild when layout moves the grid.
+  CGRect _cachedAccessibilityGridFrame;
 
   BOOL _imageRemeasurePending;
   // Frame, in grid coordinates, of the link whose menu is being presented. Null for the table's own menu.
@@ -384,7 +407,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   if (_shownColWidths == nil) {
     return _totalTableWidth;
   }
-  return [[_shownColWidths valueForKeyPath:@"@sum.self"] doubleValue] + self.config.tableBorderWidth;
+  return [[_shownColWidths valueForKeyPath:@"@sum.self"] doubleValue] + ENRMTableOuterBorder(self.config);
 }
 
 #if !TARGET_OS_OSX
@@ -482,6 +505,8 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   }
 #endif
   [self renderGrid];
+  // renderGrid puts the grid at the origin; layout moves it back to its inset and alignment.
+  [self invalidateLiftLayout];
 }
 
 - (void)computeLayout
@@ -490,7 +515,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   NSMutableArray<NSNumber *> *rowHeights = nil;
   CGFloat totalWidth = 0;
   CGFloat totalHeight = 0;
-  ENRMTableComputeLayout(_rows, _colCount, self.config, self.config.tableBorderWidth, &colWidths, &rowHeights,
+  ENRMTableComputeLayout(_rows, _colCount, self.config, ENRMTableOuterBorder(self.config), &colWidths, &rowHeights,
                          &totalWidth, &totalHeight);
   _colWidths = colWidths;
   _rowHeights = rowHeights;
@@ -513,7 +538,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
     return 0;
 
   CGFloat totalHeight = 0;
-  ENRMTableComputeLayout(rows, colCount, config, config.tableBorderWidth, NULL, NULL, NULL, &totalHeight);
+  ENRMTableComputeLayout(rows, colCount, config, ENRMTableOuterBorder(config), NULL, NULL, NULL, &totalHeight);
   return totalHeight;
 }
 
@@ -566,6 +591,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   }
 
   ENRMTableGridView *gridView = (ENRMTableGridView *)_gridContainer;
+  gridView.rowLinesOnly = self.config.tableRowLinesOnly;
   [gridView updateWithRows:[rowDataArray copy]
                columnWidths:_colWidths
                  rowHeights:_rowHeights
@@ -584,7 +610,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
 - (void)renderGridIOS
 {
   _gridContainer.frame = CGRectMake(0, 0, _totalTableWidth, _totalTableHeight);
-  _gridContainer.layer.cornerRadius = self.config.tableBorderRadius;
+  _gridContainer.layer.cornerRadius = self.config.tableRowLinesOnly ? 0 : self.config.tableBorderRadius;
   _gridContainer.layer.masksToBounds = YES;
 
   NSUInteger bodyRowIndex = 0;
@@ -604,6 +630,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   }
 
   ENRMTableIOSGridView *gridView = (ENRMTableIOSGridView *)_gridContainer;
+  gridView.rowLinesOnly = self.config.tableRowLinesOnly;
   [gridView updateWithRows:[rowDataArray copy]
                columnWidths:_colWidths
                  rowHeights:_rowHeights
@@ -895,46 +922,120 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
     return freeSpace / 2;
   if ([align isEqualToString:@"right"])
     return freeSpace;
+  // A table under right-to-left list text hugs that text's edge.
+  if (align.length == 0 && _lift && [self liftIsRightToLeft])
+    return freeSpace;
   return 0;
+}
+
+- (void)invalidateLiftLayout
+{
+  _cachedAccessibilityElements = nil;
+#if !TARGET_OS_OSX
+  [self setNeedsLayout];
+#else
+  self.needsLayout = YES;
+#endif
+}
+
+- (void)setLift:(ENRMLiftedIndent *)lift
+{
+  if (_lift == lift)
+    return;
+  _lift = lift;
+  [self invalidateLiftLayout];
+}
+
+- (void)setWritingDirectionMode:(ENRMWritingDirectionMode)writingDirectionMode
+{
+  if (_writingDirectionMode == writingDirectionMode)
+    return;
+  _writingDirectionMode = writingDirectionMode;
+  [self invalidateLiftLayout];
+}
+
+- (void)setResolvedLayoutDirection:(NSWritingDirection)resolvedLayoutDirection
+{
+  if (_resolvedLayoutDirection == resolvedLayoutDirection)
+    return;
+  _resolvedLayoutDirection = resolvedLayoutDirection;
+  [self invalidateLiftLayout];
+}
+
+- (BOOL)liftIsRightToLeft
+{
+  return ENRMDirectionForMode(_writingDirectionMode, _lift.firstStrongDirection, _lift.wordMajorityDirection,
+                              _resolvedLayoutDirection) == NSWritingDirectionRightToLeft;
+}
+
+// Where the table goes: the bounds, or for a lifted table the part right of its item's text indent (left
+// of it for right-to-left text), plus how far it may overhang on the left and the right. A lifted table
+// overhangs only on its trailing side, never into the list's gutter.
+- (CGRect)tableBoundsWithOverhangLeft:(CGFloat *)left right:(CGFloat *)right
+{
+  CGRect bounds = self.bounds;
+  CGFloat overhang = MAX(self.config.tableHorizontalOverflow, 0);
+  *left = overhang;
+  *right = overhang;
+  if (!_lift)
+    return bounds;
+  const BOOL rtl = [self liftIsRightToLeft];
+  CGFloat inset = MIN(MAX(_lift.indent, 0) + overhang, bounds.size.width);
+  bounds.size.width -= inset;
+  if (rtl) {
+    *right = 0;
+  } else {
+    bounds.origin.x += inset;
+    *left = 0;
+  }
+  return bounds;
+}
+
+- (CGRect)tableBounds
+{
+  CGFloat left, right;
+  return [self tableBoundsWithOverhangLeft:&left right:&right];
 }
 
 - (void)layoutSubviews
 {
   [super layoutSubviews];
-  _scrollView.frame = self.bounds;
+  CGFloat left, right;
+  CGRect tableBounds = [self tableBoundsWithOverhangLeft:&left right:&right];
+  CGFloat containerWidth = tableBounds.size.width;
+  // The width the table has without overhanging.
+  CGFloat contentWidth = containerWidth - left - right;
 #if !TARGET_OS_OSX
-  CGFloat overhang = MAX(self.config.tableHorizontalOverflow, 0);
-  CGFloat containerWidth = self.bounds.size.width;
+  _scrollView.frame = tableBounds;
   CGFloat tableWidth = [self shownTableWidth];
-  BOOL tableOverflows = (overhang > 0 && tableWidth > containerWidth);
+  BOOL tableOverflows = (left + right > 0 && tableWidth > contentWidth);
 
   if (tableOverflows) {
-    UIEdgeInsets inset = UIEdgeInsetsMake(0, overhang, 0, overhang);
+    UIEdgeInsets inset = UIEdgeInsetsMake(0, left, 0, right);
     if (!UIEdgeInsetsEqualToEdgeInsets(_scrollView.contentInset, inset)) {
       _scrollView.contentInset = inset;
-      _scrollView.contentOffset = CGPointMake(-overhang, 0);
+      _scrollView.contentOffset = CGPointMake(-left, 0);
     }
     _scrollView.contentSize = CGSizeMake(tableWidth, _totalTableHeight);
     _scrollView.scrollEnabled = YES;
     _gridContainer.frame = CGRectMake(0, 0, tableWidth, _totalTableHeight);
   } else {
-    CGFloat alignOffset = [self alignOffsetForFreeSpace:containerWidth - overhang * 2 - tableWidth];
+    CGFloat alignOffset = [self alignOffsetForFreeSpace:contentWidth - tableWidth];
     _scrollView.contentInset = UIEdgeInsetsZero;
     _scrollView.contentOffset = CGPointZero;
     _scrollView.contentSize = CGSizeMake(MAX(tableWidth, containerWidth), _totalTableHeight);
-    _scrollView.scrollEnabled = (tableWidth > containerWidth);
-    _gridContainer.frame = CGRectMake(overhang + alignOffset, 0, tableWidth, _totalTableHeight);
+    _scrollView.scrollEnabled = (tableWidth > contentWidth);
+    _gridContainer.frame = CGRectMake(left + alignOffset, 0, tableWidth, _totalTableHeight);
   }
 #else
-  CGFloat overhang = MAX(self.config.tableHorizontalOverflow, 0);
-  CGFloat containerWidth = self.bounds.size.width;
-  BOOL tableOverflows = (overhang > 0 && _totalTableWidth > containerWidth);
+  _scrollView.frame = tableBounds;
+  BOOL tableOverflows = (left + right > 0 && _totalTableWidth > contentWidth);
 
   if (tableOverflows) {
     _gridContainer.frame = CGRectMake(0, 0, _totalTableWidth, _totalTableHeight);
   } else if (_totalTableWidth > 0 && _totalTableHeight > 0) {
-    CGFloat alignOffset = [self alignOffsetForFreeSpace:containerWidth - overhang * 2 - _totalTableWidth];
-    _gridContainer.frame = CGRectMake(overhang + alignOffset, 0, _totalTableWidth, _totalTableHeight);
+    CGFloat alignOffset = [self alignOffsetForFreeSpace:contentWidth - _totalTableWidth];
+    _gridContainer.frame = CGRectMake(left + alignOffset, 0, _totalTableWidth, _totalTableHeight);
   }
 #endif
 }
@@ -956,12 +1057,21 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
 {
   if (_rows.count == 0)
     return nil;
-  if (_cachedAccessibilityElements != nil)
+
+#if !TARGET_OS_OSX
+  // Where the grid shows, cut to the table's bounds when it scrolls.
+  CGRect gridFrame =
+      CGRectIntersection([_gridContainer convertRect:_gridContainer.bounds toView:self], [self tableBounds]);
+  if (CGRectIsNull(gridFrame))
+    gridFrame = CGRectZero;
+#else
+  CGRect gridFrame = CGRectZero;
+#endif
+  if (_cachedAccessibilityElements != nil && CGRectEqualToRect(gridFrame, _cachedAccessibilityGridFrame))
     return _cachedAccessibilityElements;
 
   NSMutableArray *elements = [NSMutableArray array];
   CGFloat yOffset = 0;
-
   for (NSUInteger rowIndex = 0; rowIndex < _rows.count; rowIndex++) {
     NSArray<TableCellData *> *row = _rows[rowIndex];
     CGFloat rowHeight = [_rowHeights[rowIndex] doubleValue];
@@ -981,7 +1091,8 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
       element.accessibilityLabel =
           [withN stringByReplacingOccurrencesOfString:@"{content}"
                                            withString:[cellTexts componentsJoinedByString:@", "]];
-      element.accessibilityFrameInContainerSpace = CGRectMake(0, yOffset, _totalTableWidth, rowHeight);
+      element.accessibilityFrameInContainerSpace =
+          CGRectMake(gridFrame.origin.x, yOffset, gridFrame.size.width, rowHeight);
       element.accessibilityTraits =
           row.firstObject.isHeader ? UIAccessibilityTraitHeader : UIAccessibilityTraitStaticText;
       [elements addObject:element];
@@ -996,6 +1107,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
     yOffset += rowHeight;
   }
   _cachedAccessibilityElements = elements;
+  _cachedAccessibilityGridFrame = gridFrame;
   return elements;
 }
 

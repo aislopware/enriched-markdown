@@ -302,6 +302,34 @@ static NSWritingDirection ENRMResolveWordMajorityParagraph(NSAttributedString *o
   return ENRMWordMajorityDirection(ENRMWordMajorityProseText(output, paragraphRange));
 }
 
+void ENRMParagraphContentDirections(NSAttributedString *text, NSRange paragraphRange, NSWritingDirection *firstStrong,
+                                    NSWritingDirection *wordMajority)
+{
+  *firstStrong = ENRMResolveFirstStrongParagraph(text, paragraphRange);
+  *wordMajority = ENRMResolveWordMajorityParagraph(text, paragraphRange);
+}
+
+NSWritingDirection ENRMDirectionForMode(ENRMWritingDirectionMode mode, NSWritingDirection firstStrong,
+                                        NSWritingDirection wordMajority, NSWritingDirection layoutDirection)
+{
+  NSWritingDirection direction = NSWritingDirectionNatural;
+  switch (mode) {
+    case ENRMWritingDirectionModeAuto:
+      break;
+    case ENRMWritingDirectionModeLTR:
+      return NSWritingDirectionLeftToRight;
+    case ENRMWritingDirectionModeRTL:
+      return NSWritingDirectionRightToLeft;
+    case ENRMWritingDirectionModeFirstStrong:
+      direction = firstStrong;
+      break;
+    case ENRMWritingDirectionModeWordMajority:
+      direction = wordMajority;
+      break;
+  }
+  return direction == NSWritingDirectionNatural ? layoutDirection : direction;
+}
+
 static void ENRMApplyParagraphDirections(NSMutableAttributedString *output, NSWritingDirection fallback,
                                          NSWritingDirection (*resolve)(NSAttributedString *, NSRange))
 {

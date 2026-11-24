@@ -25,6 +25,7 @@ class ListRenderer(
     val start = builder.length
     // The items after the first of a list already shown (TextRenderCache): no gap above them.
     val continuation = node.getAttribute(CONTINUATION_ATTRIBUTE) == "true"
+    val noMarginTop = continuation || node.getAttribute(NO_MARGIN_TOP_ATTRIBUTE) == "true"
     val listStyle = config.style.listStyle
     val listType = if (isOrdered) BlockStyleContext.ListType.ORDERED else BlockStyleContext.ListType.UNORDERED
 
@@ -36,12 +37,12 @@ class ListRenderer(
 
     // For top-level lists, insert marginTop spacer before rendering content
     val topLevel = entryState.previousDepth == 0
-    if (topLevel && !continuation) {
+    if (topLevel && !noMarginTop) {
       applyMarginTop(builder, start, listStyle.marginTop)
     }
 
     // Track start index after the potential 1-character marginTop spacer
-    val contentStart = if (topLevel && !continuation && listStyle.marginTop > 0) start + 1 else start
+    val contentStart = if (topLevel && !noMarginTop && listStyle.marginTop > 0) start + 1 else start
 
     // Ensure nested lists start on a new line if the parent hasn't provided one
     if (entryState.previousDepth > 0 && builder.isNotEmpty() && builder.last() != '\n') {
@@ -68,11 +69,26 @@ class ListRenderer(
     }
 
     if (builder.length > contentStart) {
-      applyListSpacing(builder, contentStart, entryState.previousDepth, listStyle, factory.blockStyleContext, itemStarts)
+      val noMarginBottom = node.getAttribute(NO_MARGIN_BOTTOM_ATTRIBUTE) == "true"
+      // A later piece of a list split around a lifted table: the gap above its first item is an item gap.
+      val spacesFirstItem = node.getAttribute(NO_MARGIN_TOP_ATTRIBUTE) == "true" && contentStart > 0
+      applyListSpacing(
+        builder,
+        contentStart,
+        entryState.previousDepth,
+        listStyle,
+        noMarginBottom,
+        spacesFirstItem,
+        factory.blockStyleContext,
+        itemStarts,
+      )
     }
   }
 
-  /** Lists under 100 keep the `99.` column, so only numbers from 100 on widen it. Task items draw a checkbox. */
+  /**
+   * Lists under 100 keep the `99.` column, so only numbers from 100 on widen it. Task items draw a checkbox.
+   * A list split around lifted tables widens every piece by its largest number ([MARKER_NUMBER_ATTRIBUTE]).
+   */
   private fun markerExtraWidth(
     node: MarkdownASTNode,
     listStyle: ListStyle,
@@ -82,10 +98,15 @@ class ListRenderer(
     val wideNumbers = mutableListOf<Int>()
     var number = startNumber
     for (item in node.children) {
-      if (item.type != MarkdownASTNode.NodeType.ListItem) continue
+      if (item.type != MarkdownASTNode.NodeType.ListItem || item.getAttribute(CONTINUATION_ATTRIBUTE) == "true") continue
       if (number >= 100 && item.attributes["isTask"] != "true") wideNumbers += number
       number++
     }
+    node
+      .getAttribute(MARKER_NUMBER_ATTRIBUTE)
+      ?.toIntOrNull()
+      ?.takeIf { it >= 100 }
+      ?.let { wideNumbers += it }
     return OrderedListSpan.measureExtraWidth(listStyle, factory.context, wideNumbers)
   }
 
@@ -94,6 +115,8 @@ class ListRenderer(
     start: Int,
     depth: Int,
     style: ListStyle,
+    noMarginBottom: Boolean,
+    spacesFirstItem: Boolean,
     styleContext: BlockStyleContext,
     itemStarts: List<Int>,
   ) {
@@ -119,26 +142,41 @@ class ListRenderer(
 
     // Item spacing and external bottom margin are only handled by the root-level list
     if (depth == 0) {
-      applyItemSpacing(builder, start, style.itemSpacing, styleContext)
+      applyItemSpacing(builder, start, style.itemSpacing, styleContext, spacesFirstItem)
 
-      builder.append("\n")
-      builder.setSpan(
-        MarginBottomSpan(style.marginBottom),
-        builder.length - 1,
-        builder.length,
-        SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE,
-      )
+      if (noMarginBottom) {
+        // No spacer line: the items already end in a newline. A zero margin on it still makes the
+        // list, not an earlier block, the text's last margin (Renderer.removeTrailingMargin).
+        // A code block or quote ending the list already put its own margin there.
+        val last = builder.length - 1
+        val hasMargin =
+          builder.getSpans(last, builder.length, MarginBottomSpan::class.java).any {
+            builder.getSpanStart(it) <= last && builder.getSpanEnd(it) >= builder.length
+          }
+        if (builder.last() == '\n' && !hasMargin) {
+          builder.setSpan(MarginBottomSpan(0f), last, builder.length, SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE)
+        }
+      } else {
+        builder.append("\n")
+        builder.setSpan(
+          MarginBottomSpan(style.marginBottom),
+          builder.length - 1,
+          builder.length,
+          SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE,
+        )
+      }
     }
   }
 
   // Inserts the vertical gap between consecutive items (including nested ones)
   // by spanning the newline that precedes each item start. The first item of
-  // the root list gets no spacing above it.
+  // the root list gets no spacing above it, unless [spacesFirstItem].
   private fun applyItemSpacing(
     builder: SpannableStringBuilder,
     start: Int,
     itemSpacing: Float,
     styleContext: BlockStyleContext,
+    spacesFirstItem: Boolean,
   ) {
     if (itemSpacing <= 0f) return
 
@@ -148,7 +186,8 @@ class ListRenderer(
         .distinct()
         .sorted()
 
-    for (itemStart in itemStarts.drop(1)) {
+    for (itemStart in itemStarts) {
+      if (itemStart == 0 || (itemStart == start && !spacesFirstItem)) continue
       builder.setSpan(
         ListItemSpacingSpan(itemSpacing),
         itemStart - 1,
@@ -159,7 +198,14 @@ class ListRenderer(
   }
 
   companion object {
+    /** On a list: the items after the first of a list already shown. On an item: the rest of an item split by a lifted table. */
     const val CONTINUATION_ATTRIBUTE = "enrmContinuation"
+
+    // Set on the synthetic lists splitASTIntoSegments makes around tables lifted out of list items.
+    const val LIFT_KEY_ATTRIBUTE = "enrmLiftKey"
+    const val MARKER_NUMBER_ATTRIBUTE = "enrmMarkerNumber"
+    const val NO_MARGIN_TOP_ATTRIBUTE = "enrmNoMarginTop"
+    const val NO_MARGIN_BOTTOM_ATTRIBUTE = "enrmNoMarginBottom"
 
     /** The first number of an ordered list, as md4c reports it. */
     fun startNumber(list: MarkdownASTNode): Int = list.getAttribute("start")?.toIntOrNull()?.coerceAtLeast(0) ?: 1

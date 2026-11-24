@@ -120,6 +120,9 @@ class Renderer {
 
   fun getTopLevelListItemTaskStarts(): IntArray = cachedFactory?.blockStyleContext?.topLevelListItemTaskStarts?.toIntArray() ?: IntArray(0)
 
+  /** The content indent of each item of the last [renderContent] that a table was lifted out of, by lift key. */
+  fun getLiftIndents(): Map<String, LiftIndent> = cachedFactory?.blockStyleContext?.liftIndents?.toMap() ?: emptyMap()
+
   /** Removes trailing newlines and captures the margin of the final element. */
   private fun removeTrailingMargin(builder: SpannableStringBuilder) {
     if (builder.isEmpty()) return

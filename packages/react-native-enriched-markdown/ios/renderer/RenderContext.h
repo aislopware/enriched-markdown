@@ -24,6 +24,15 @@ static inline BOOL ENRMBlockTypeReappliesBaselineOffset(BlockType type)
 
 typedef NS_ENUM(NSInteger, ListType) { ListTypeUnordered, ListTypeOrdered };
 
+// The text indent of a list item a table was lifted out of, keyed as the table segment is (liftKey).
+@interface ENRMLiftedIndent : NSObject
+@property (nonatomic, assign) CGFloat indent;
+// The directions the item's first paragraph reads in by its content (first strong letter, word majority),
+// Natural without letters: which one applies, and so the side of the indent, is the view's writing mode.
+@property (nonatomic, assign) NSWritingDirection firstStrongDirection;
+@property (nonatomic, assign) NSWritingDirection wordMajorityDirection;
+@end
+
 @interface BlockStyle : NSObject
 @property (nonatomic, assign) CGFloat fontSize;
 @property (nonatomic, strong) NSString *fontFamily;
@@ -61,6 +70,8 @@ typedef NS_ENUM(NSInteger, ListType) { ListTypeUnordered, ListTypeOrdered };
 @property (nonatomic, assign) CGFloat maxFontSizeMultiplier;
 @property (nonatomic, assign) NSInteger taskItemCount;
 @property (nonatomic, strong) NSMutableArray<id<ENRMLatexErrorReporting>> *mathReporters;
+// By liftKey: lives on the context, not the text, so a render the cache keeps without its text has it.
+@property (nonatomic, strong) NSMutableDictionary<NSString *, ENRMLiftedIndent *> *liftedIndents;
 
 - (instancetype)init;
 - (void)reset;

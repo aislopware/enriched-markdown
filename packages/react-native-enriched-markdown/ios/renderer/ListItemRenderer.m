@@ -8,6 +8,28 @@
 #import "RendererFactory.h"
 #import "StyleConfig.h"
 
+// The directions of the item's first paragraph with content, which its marker follows. Code blocks are always
+// left to right; spacer lines are skipped.
+static void ENRMLiftHeadDirections(NSAttributedString *output, NSRange itemRange, NSWritingDirection *firstStrong,
+                                   NSWritingDirection *wordMajority)
+{
+  *firstStrong = *wordMajority = NSWritingDirectionNatural;
+  NSString *string = output.string;
+  NSCharacterSet *blank = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+  for (NSUInteger position = itemRange.location; position < NSMaxRange(itemRange);) {
+    NSRange paragraph = [string paragraphRangeForRange:NSMakeRange(position, 0)];
+    if ([[output attribute:CodeBlockAttributeName atIndex:position effectiveRange:NULL] boolValue]) {
+      *firstStrong = *wordMajority = NSWritingDirectionLeftToRight;
+      return;
+    }
+    if ([[string substringWithRange:paragraph] stringByTrimmingCharactersInSet:blank].length > 0) {
+      ENRMParagraphContentDirections(output, paragraph, firstStrong, wordMajority);
+      return;
+    }
+    position = MAX(NSMaxRange(paragraph), position + 1);
+  }
+}
+
 NSString *const ListDepthAttribute = @"ListDepth";
 NSString *const ListTypeAttribute = @"ListType";
 NSString *const ListItemNumberAttribute = @"ListItemNumber";
@@ -15,6 +37,13 @@ NSString *const ListItemMarkerStartAttribute = @"ListItemMarkerStart";
 NSString *const TaskItemAttribute = @"TaskItem";
 NSString *const TaskCheckedAttribute = @"TaskChecked";
 NSString *const TaskIndexAttribute = @"TaskIndex";
+NSString *const ListItemContinuationAttribute = @"ListItemContinuation";
+NSString *const ListItemLiftedAttribute = @"ListItemLifted";
+NSString *const ENRMLiftKeyNodeAttribute = @"enrmLiftKey";
+NSString *const ENRMListContinuationNodeAttribute = @"enrmContinuation";
+NSString *const ENRMListNoMarginTopNodeAttribute = @"enrmNoMarginTop";
+NSString *const ENRMListNoMarginBottomNodeAttribute = @"enrmNoMarginBottom";
+NSString *const ENRMListMarkerNumberNodeAttribute = @"enrmMarkerNumber";
 
 @implementation ENRMListMarkerDescriptor
 @end
@@ -69,12 +98,15 @@ NSString *const TaskIndexAttribute = @"TaskIndex";
   if (!context)
     return;
 
-  context.listItemNumber++;
-  const NSInteger currentPosition = context.listItemNumber;
+  // A continuation carries on the item it continues: same number, and the next item still gets the next one.
+  const BOOL isContinuation = [node.attributes[ENRMListContinuationNodeAttribute] isEqualToString:@"true"];
+  const NSInteger currentPosition = isContinuation ? context.listItemNumber + 1 : ++context.listItemNumber;
   const NSInteger currentDepth = context.listDepth; // 1-based (1 = top level)
 
-  const BOOL isTask = [node.attributes[@"isTask"] isEqualToString:@"true"];
-  const BOOL isChecked = isTask && [node.attributes[@"taskChecked"] isEqualToString:@"true"];
+  // A continuation of a task keeps the checkbox column and checked styling but is not a task of its own.
+  const BOOL isTaskNode = [node.attributes[@"isTask"] isEqualToString:@"true"];
+  const BOOL isTask = !isContinuation && isTaskNode;
+  const BOOL isChecked = isTaskNode && [node.attributes[@"taskChecked"] isEqualToString:@"true"];
   NSInteger taskIndex = -1;
   if (isTask) {
     taskIndex = context.taskItemCount;
@@ -84,7 +116,7 @@ NSString *const TaskIndexAttribute = @"TaskIndex";
   // currentDepth - 1 handles the horizontal offset for nested lists
   const NSInteger nestingLevel = currentDepth - 1;
   // A task in a widened ordered list moves with its numbered siblings.
-  const CGFloat baseMarkerWidth = isTask ? [_config effectiveListMarginLeftForTask] + context.listMarkerExtra
+  const CGFloat baseMarkerWidth = isTaskNode ? [_config effectiveListMarginLeftForTask] + context.listMarkerExtra
                                   : (context.listType == ListTypeOrdered) ? context.listMarkerWidth
                                                                           : [_config effectiveListMarginLeftForBullet];
 
@@ -108,6 +140,22 @@ NSString *const TaskIndexAttribute = @"TaskIndex";
     context.listItemMarkerExtra = prevMarkerExtra;
   }
 
+  NSString *liftKey = node.attributes[ENRMLiftKeyNodeAttribute];
+  NSRange itemText = NSMakeRange(startLocation, output.length - startLocation);
+  if (liftKey && [output.string rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet.invertedSet
+                                                options:0
+                                                  range:itemText]
+                         .location == NSNotFound) {
+    // An item that opens with a lifted table still draws its marker, on a line of its own. A space, not
+    // just a newline: the segment ends here and its trailing newlines (an empty code block's spacer too)
+    // are trimmed.
+    [output deleteCharactersInRange:itemText];
+    NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+    attributes[NSFontAttributeName] = [_config listStyleFont];
+    attributes[NSForegroundColorAttributeName] = [_config listStyleColor];
+    [output appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:attributes]];
+  }
+
   // Ensure every list item ends with a newline to prevent paragraph merging
   if (output.length > startLocation && ![output.string hasSuffix:@"\n"]) {
     [output appendAttributedString:kNewlineAttributedString];
@@ -118,10 +166,12 @@ NSString *const TaskIndexAttribute = @"TaskIndex";
     return;
 
   // Informs MarkdownAccessibilityElementBuilder about the specific boundaries of this list item
-  [context registerListItemRange:itemRange
-                        position:currentPosition
-                           depth:currentDepth
-                       isOrdered:(context.listType == ListTypeOrdered)];
+  if (!isContinuation) {
+    [context registerListItemRange:itemRange
+                          position:currentPosition
+                             depth:currentDepth
+                         isOrdered:(context.listType == ListTypeOrdered)];
+  }
 
   const CGFloat lineHeightConfig = [_config listStyleLineHeight];
 
@@ -132,6 +182,9 @@ NSString *const TaskIndexAttribute = @"TaskIndex";
     ListItemNumberAttribute : @(currentPosition)
   } mutableCopy];
 
+  if (isContinuation) {
+    metadata[ListItemContinuationAttribute] = @YES;
+  }
   if (isTask) {
     metadata[TaskItemAttribute] = @YES;
     metadata[TaskCheckedAttribute] = @(isChecked);
@@ -192,6 +245,24 @@ NSString *const TaskIndexAttribute = @"TaskIndex";
   }
   if (pos < itemEnd) {
     applyStyleToRange(NSMakeRange(pos, itemEnd - pos));
+  }
+
+  if (liftKey) {
+    ENRMLiftedIndent *lifted = [[ENRMLiftedIndent alloc] init];
+    lifted.indent = totalIndent;
+    NSWritingDirection firstStrong, wordMajority;
+    ENRMLiftHeadDirections(output, itemRange, &firstStrong, &wordMajority);
+    lifted.firstStrongDirection = firstStrong;
+    lifted.wordMajorityDirection = wordMajority;
+    context.liftedIndents[liftKey] = lifted;
+    [output addAttribute:ListItemLiftedAttribute value:@YES range:itemRange];
+  }
+
+  if (isContinuation) {
+    if (isChecked) {
+      [self applyCheckedDecorationsTo:output range:itemRange nestingLevel:nestingLevel];
+    }
+    return;
   }
 
   ENRMListMarkerDescriptor *marker = [[ENRMListMarkerDescriptor alloc] init];

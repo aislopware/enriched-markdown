@@ -248,6 +248,9 @@ object HTMLGenerator {
     val type: Int,
     val depth: Int = 0,
     val isTaskChecked: Boolean = false,
+    // Text after a table lifted out of a list item: more of that item, not an item of its own.
+    val continuesItem: Boolean = false,
+    val itemNumber: Int? = null,
   )
 
   fun generateHTML(
@@ -446,7 +449,15 @@ object HTMLGenerator {
 
     val depth = para.depth
     val isOrdered = para.type == TYPE_ORDERED_LIST
-    val isTask = para.type == TYPE_TASK_LIST
+    val isTask = para.type == TYPE_TASK_LIST && !para.continuesItem
+
+    if (para.continuesItem && state.listDepth == depth && html.endsWith("</li>")) {
+      html.setLength(html.length - "</li>".length)
+      html.append("<br>").append(content).append("</li>")
+      state.previousWasBlockquote = false
+      state.previousWasCodeBlock = false
+      return
+    }
 
     // Close lists to shallower depth
     while (state.listDepth > depth) {
@@ -493,8 +504,11 @@ object HTMLGenerator {
       }
     }
 
+    html.append("<li")
+    // Its own number, so a list split around a lifted table copies its later piece from where it starts.
+    if (isOrdered && !para.continuesItem && para.itemNumber != null) html.append(" value=\"").append(para.itemNumber).append('"')
     html
-      .append("<li style=\"margin-bottom: ")
+      .append(" style=\"margin-bottom: ")
       .append(styles.listMarginBottom)
       .append("px; color: ")
       .append(styles.listColor)
@@ -502,7 +516,7 @@ object HTMLGenerator {
       .append(styles.listFontSize)
       .append("px;")
 
-    if (isTask) {
+    if (isTask || para.continuesItem) {
       html.append(" list-style-type: none;")
     }
 
@@ -873,7 +887,8 @@ object HTMLGenerator {
       val depth = getDepthForType(text, currentIndex, type, listSpan)
       val isTaskChecked = type == TYPE_TASK_LIST && (listSpan as? TaskListSpan)?.isChecked == true
 
-      paragraphs.add(ParagraphInfo(currentIndex, lineEnd, type, depth, isTaskChecked))
+      val itemNumber = (listSpan as? OrderedListSpan)?.itemNumber
+      paragraphs.add(ParagraphInfo(currentIndex, lineEnd, type, depth, isTaskChecked, listSpan?.continuesItem == true, itemNumber))
       currentIndex = lineEnd
     }
 
@@ -956,15 +971,25 @@ object HTMLGenerator {
 
     return buildString(rows.size * 250) {
       append("<table style=\"border-collapse: separate; border-spacing: 0; ")
-      append("border: ${borderWidthPx.toInt()}px solid $borderColorCSS; ")
-      append("border-radius: ${borderRadiusPx.toInt()}px; ")
+      if (!tableStyle.rowLinesOnly) {
+        append("border: ${borderWidthPx.toInt()}px solid $borderColorCSS; ")
+        append("border-radius: ${borderRadiusPx.toInt()}px; ")
+      }
       append("overflow: hidden; font-size: ${fontSizePx.toInt()}px;\">")
 
       var hasOpenedBody = false
       var bodyRowIndex = 0
 
-      for (row in rows) {
+      val lastRowIndex = rows.indexOfLast { it.isNotEmpty() }
+      for ((rowIndex, row) in rows.withIndex()) {
         if (row.isEmpty()) continue
+        // Row lines only: a line under each row but the last, and no outer or column borders.
+        val cellBorder =
+          when {
+            !tableStyle.rowLinesOnly -> "border: ${borderWidthPx.toInt()}px solid $borderColorCSS; "
+            rowIndex < lastRowIndex -> "border-bottom: ${borderWidthPx.toInt()}px solid $borderColorCSS; "
+            else -> ""
+          }
 
         val isHeaderRow = row.first().second
 
@@ -994,7 +1019,7 @@ object HTMLGenerator {
           append("text-align: $textAlignment; ")
           append("background-color: $backgroundColor; ")
           append("color: $textColor; ")
-          append("border: ${borderWidthPx.toInt()}px solid $borderColorCSS; ")
+          append(cellBorder)
           append("font-weight: $fontWeight;\">")
 
           if (cellText.isNotEmpty()) {

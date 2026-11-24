@@ -48,6 +48,9 @@ class BlockStyleContext {
   var taskItemCount = 0
   var accumulatedIndent = 0
 
+  // The content indent of each item a table was lifted out of, by its ListRenderer.LIFT_KEY_ATTRIBUTE.
+  val liftIndents = mutableMapOf<String, LiftIndent>()
+
   val listItemStarts = mutableListOf<Int>()
 
   // Where each item of the last top-level list started, and the task count before it: a stream
@@ -166,6 +169,7 @@ class BlockStyleContext {
     listItemMarkerWidth = null
     taskItemCount = 0
     accumulatedIndent = 0
+    liftIndents.clear()
     listItemStarts.clear()
     topLevelListItemStarts.clear()
     topLevelListItemTaskStarts.clear()

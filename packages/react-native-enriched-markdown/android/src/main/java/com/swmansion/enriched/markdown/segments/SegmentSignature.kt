@@ -86,6 +86,21 @@ object SegmentSignature {
     hasTasks: Boolean,
   ): Long = if (hasTasks) fnvMixLong(signature, taskIndexOffset.toLong()) else signature
 
+  fun withLeadingInset(
+    signature: Long,
+    leadingInset: Int,
+    leadingInsetRtl: Boolean?,
+  ): Long {
+    if (leadingInset == 0) return signature
+    val side =
+      when (leadingInsetRtl) {
+        null -> 0L
+        false -> 1L
+        true -> 2L
+      }
+    return fnvMixLong(fnvMixLong(signature, leadingInset.toLong()), side)
+  }
+
   fun signatureForNodes(nodes: List<MarkdownASTNode>): Long =
     signatureForNodeSignatures(LongArray(nodes.size) { signatureForNode(nodes[it]) })
 

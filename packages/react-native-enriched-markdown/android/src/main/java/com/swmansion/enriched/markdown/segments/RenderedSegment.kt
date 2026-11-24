@@ -5,6 +5,8 @@ import android.text.Spannable
 import com.swmansion.enriched.markdown.math.LatexErrorReporter
 import com.swmansion.enriched.markdown.parser.MarkdownASTNode
 import com.swmansion.enriched.markdown.renderer.BlockquoteTextRenderer
+import com.swmansion.enriched.markdown.renderer.LiftIndent
+import com.swmansion.enriched.markdown.renderer.ListRenderer
 import com.swmansion.enriched.markdown.renderer.Renderer
 import com.swmansion.enriched.markdown.spans.ImageSpan
 import com.swmansion.enriched.markdown.styles.BlockquoteStyle
@@ -49,11 +51,17 @@ sealed interface RenderedSegment {
     val revision: Long = 0,
     /** How to get from the text of [TextPatch.baseRevision] to this one, if a view shows it. */
     val patch: TextPatch? = null,
+    /** The content indent of each list item in this text a table was lifted out of, by lift key. */
+    val liftIndents: Map<String, LiftIndent> = emptyMap(),
   ) : RenderedSegment
 
   data class Table(
     val node: MarkdownASTNode,
     override val signature: Long,
+    /** How far the table starts from the leading edge: its list item's text column when lifted out of one. */
+    val leadingInset: Int = 0,
+    /** Whether that leading edge is the right one; null follows the layout direction. */
+    val leadingInsetRtl: Boolean? = null,
   ) : RenderedSegment
 
   data class Math(
@@ -98,6 +106,7 @@ object MarkdownSegmentRenderer {
     cache: TextRenderCache? = null,
   ): List<RenderedSegment> {
     var taskIndexOffset = startingTaskIndex
+    val liftIndents = HashMap<String, LiftIndent>()
     val lastText = segments.indexOfLast { it is MarkdownSegment.Text }
 
     return segments.mapIndexed { index, segment ->
@@ -113,12 +122,19 @@ object MarkdownSegmentRenderer {
               renderTextSegment(segment.nodes, renderNodes(segment.nodes, taskIndexOffset), taskIndexOffset)
             }
           taskIndexOffset = taskItemCount
+          liftIndents.putAll(rendered.liftIndents)
           rendered
         }
 
         is MarkdownSegment.Table -> {
-          val signature = SegmentSignature.signatureForNode(segment.node) xor SegmentSignature.TABLE_KIND_SALT
-          RenderedSegment.Table(segment.node, signature)
+          val lift = segment.liftKey?.let { liftIndents[it] }
+          val signature =
+            SegmentSignature.withLeadingInset(
+              SegmentSignature.signatureForNode(segment.node) xor SegmentSignature.TABLE_KIND_SALT,
+              lift?.indent ?: 0,
+              lift?.isRtl,
+            )
+          RenderedSegment.Table(segment.node, signature, lift?.indent ?: 0, lift?.isRtl)
         }
 
         is MarkdownSegment.Math -> {
@@ -165,7 +181,15 @@ object MarkdownSegmentRenderer {
    * blockquote, whose children render only when its container view applies the node.
    */
   private fun countTaskItems(node: MarkdownASTNode): Int {
-    val own = if (node.type == MarkdownASTNode.NodeType.ListItem && node.getAttribute("isTask") == "true") 1 else 0
+    val own =
+      if (node.type == MarkdownASTNode.NodeType.ListItem &&
+        node.getAttribute("isTask") == "true" &&
+        node.getAttribute(ListRenderer.CONTINUATION_ATTRIBUTE) != "true"
+      ) {
+        1
+      } else {
+        0
+      }
     return own + node.children.sumOf { countTaskItems(it) }
   }
 

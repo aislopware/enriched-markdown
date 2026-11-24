@@ -2,6 +2,7 @@
 #import "ENRMFeatureFlags.h"
 #import "ENRMTextRenderCache.h"
 #import "ENRMTextRenderer.h"
+#import "ListItemRenderer.h"
 #import "MarkdownASTNode.h"
 #import "ParagraphStyleUtils.h"
 #import "RenderContext.h"
@@ -53,20 +54,225 @@ static uint64_t ENRMMixTaskIndexOffset(uint64_t signature, NSInteger taskIndexOf
 // Counts task items as ListItemRenderer does: a quote's children render later, in its own view.
 static NSInteger ENRMCountTaskItems(MarkdownASTNode *node)
 {
-  NSInteger count =
-      (node.type == MarkdownNodeTypeListItem && [node.attributes[@"isTask"] isEqualToString:@"true"]) ? 1 : 0;
+  NSInteger count = (node.type == MarkdownNodeTypeListItem && [node.attributes[@"isTask"] isEqualToString:@"true"] &&
+                     ![node.attributes[ENRMListContinuationNodeAttribute] isEqualToString:@"true"])
+                        ? 1
+                        : 0;
   for (MarkdownASTNode *child in node.children) {
     count += ENRMCountTaskItems(child);
   }
   return count;
 }
 
+static BOOL ENRMIsListNode(MarkdownASTNode *node)
+{
+  return node.type == MarkdownNodeTypeOrderedList || node.type == MarkdownNodeTypeUnorderedList;
+}
+
+static BOOL ENRMListHasLiftedTable(MarkdownASTNode *list);
+
+// A child that ends an item's head: a table, or a nested list holding one.
+static BOOL ENRMIsLiftingChild(MarkdownASTNode *child)
+{
+  return child.type == MarkdownNodeTypeTable || (ENRMIsListNode(child) && ENRMListHasLiftedTable(child));
+}
+
+static BOOL ENRMListHasLiftedTable(MarkdownASTNode *list)
+{
+  for (MarkdownASTNode *item in list.children) {
+    if (item.type != MarkdownNodeTypeListItem)
+      continue;
+    for (MarkdownASTNode *child in item.children) {
+      if (ENRMIsLiftingChild(child))
+        return YES;
+    }
+  }
+  return NO;
+}
+
+static MarkdownASTNode *ENRMCopyNode(MarkdownASTNode *node, NSArray<MarkdownASTNode *> *children)
+{
+  MarkdownASTNode *copy = [[MarkdownASTNode alloc] initWithType:node.type];
+  copy.content = node.content;
+  copy.attributes = [node.attributes mutableCopy];
+  copy.children = [children mutableCopy];
+  return copy;
+}
+
+static MarkdownASTNode *ENRMContinuationItem(MarkdownASTNode *item, NSArray<MarkdownASTNode *> *children)
+{
+  MarkdownASTNode *copy = ENRMCopyNode(item, children);
+  [copy.attributes removeObjectForKey:ENRMLiftKeyNodeAttribute];
+  copy.attributes[ENRMListContinuationNodeAttribute] = @"true";
+  return copy;
+}
+
+typedef MarkdownASTNode * (^ENRMListWrap)(MarkdownASTNode *fragment);
+
+// The text renderer cannot draw a table, so a table in a list item becomes a table segment of its own.
+// The list is split around it into copies that keep their markers, numbers and nesting; the item's
+// text after the table continues in a marker-less continuation copy. `wrap` puts a copy of `list`
+// back inside copies of its ancestors. Appends top-level nodes and ENRMTableSegments to `pieces`.
+static void ENRMLiftTablesFromList(MarkdownASTNode *list, ENRMListWrap wrap, NSMutableArray *pieces,
+                                   NSInteger *nextLiftKey)
+{
+  const BOOL ordered = list.type == MarkdownNodeTypeOrderedList;
+  NSString *startAttr = list.attributes[@"start"];
+  __block NSInteger number = (ordered && startAttr) ? MAX((NSInteger)0, startAttr.integerValue) : 1;
+  // Ordered markers widen from 100 (ListRenderer); every copy gets the gutter of the list's widest
+  // number, rounded up to all nines so it does not change with each item a stream adds.
+  NSString *markerNumber = list.attributes[ENRMListMarkerNumberNodeAttribute];
+  if (ordered && !markerNumber) {
+    NSInteger widest = 0;
+    NSInteger itemNumber = number;
+    for (MarkdownASTNode *item in list.children) {
+      if (item.type != MarkdownNodeTypeListItem)
+        continue;
+      if (![item.attributes[@"isTask"] isEqualToString:@"true"])
+        widest = itemNumber;
+      itemNumber++;
+    }
+    if (widest >= 100) {
+      NSInteger nines = 9;
+      while (nines < widest)
+        nines = nines * 10 + 9;
+      markerNumber = [NSString stringWithFormat:@"%ld", (long)nines];
+    }
+  }
+  MarkdownASTNode * (^listCopy)(NSArray<MarkdownASTNode *> *, NSInteger) =
+      ^MarkdownASTNode *(NSArray<MarkdownASTNode *> *items, NSInteger start)
+  {
+    MarkdownASTNode *copy = ENRMCopyNode(list, items);
+    if (ordered) {
+      copy.attributes[@"start"] = [NSString stringWithFormat:@"%ld", (long)start];
+      if (markerNumber)
+        copy.attributes[ENRMListMarkerNumberNodeAttribute] = markerNumber;
+    }
+    return copy;
+  };
+
+  NSMutableArray<MarkdownASTNode *> *fragment = [NSMutableArray array];
+  __block NSInteger fragmentStart = number;
+  // Takes the pending items, plus `last` when given, as one piece through `wrap`.
+  MarkdownASTNode * (^takeFragment)(MarkdownASTNode *) = ^MarkdownASTNode *(MarkdownASTNode *last)
+  {
+    if (last)
+      [fragment addObject:last];
+    MarkdownASTNode *piece = fragment.count > 0 ? wrap(listCopy(fragment, fragmentStart)) : nil;
+    [fragment removeAllObjects];
+    fragmentStart = number;
+    return piece;
+  };
+  void (^flushFragment)(void) = ^{
+    MarkdownASTNode *piece = takeFragment(nil);
+    if (piece)
+      [pieces addObject:piece];
+  };
+
+  for (MarkdownASTNode *item in list.children) {
+    NSUInteger split = NSNotFound;
+    if (item.type == MarkdownNodeTypeListItem) {
+      split = [item.children indexOfObjectPassingTest:^BOOL(MarkdownASTNode *child, NSUInteger idx, BOOL *stop) {
+        return ENRMIsLiftingChild(child);
+      }];
+    }
+    if (split == NSNotFound) {
+      [fragment addObject:item];
+      if (item.type == MarkdownNodeTypeListItem)
+        number++;
+      continue;
+    }
+
+    NSString *liftKey = [NSString stringWithFormat:@"%ld", (long)(*nextLiftKey)++];
+    const NSInteger itemNumber = number;
+    number++;
+    // An item that opens with a nested list draws its marker on that list's first line: the first piece
+    // the nested list gives is wrapped in the item itself, with the items before it.
+    __block BOOL headInNestedPiece = split == 0 && item.children[0].type != MarkdownNodeTypeTable;
+    if (!headInNestedPiece) {
+      // A head with no children (the item opens with the table) renders as an empty line with the marker.
+      MarkdownASTNode *headItem = ENRMCopyNode(item, [item.children subarrayWithRange:NSMakeRange(0, split)]);
+      headItem.attributes[ENRMLiftKeyNodeAttribute] = liftKey;
+      [fragment addObject:headItem];
+      flushFragment();
+    }
+
+    ENRMListWrap continuationWrap = ^MarkdownASTNode *(MarkdownASTNode *inner)
+    {
+      if (headInNestedPiece) {
+        headInNestedPiece = NO;
+        MarkdownASTNode *headItem = ENRMCopyNode(item, @[ inner ]);
+        headItem.attributes[ENRMLiftKeyNodeAttribute] = liftKey;
+        return takeFragment(headItem);
+      }
+      return wrap(listCopy(@[ ENRMContinuationItem(item, @[ inner ]) ], itemNumber));
+    };
+    NSMutableArray<MarkdownASTNode *> *rest = [NSMutableArray array];
+    void (^flushRest)(void) = ^{
+      if (rest.count > 0) {
+        [pieces addObject:wrap(listCopy(@[ ENRMContinuationItem(item, rest) ], itemNumber))];
+        [rest removeAllObjects];
+      }
+    };
+    for (NSUInteger index = split; index < item.children.count; index++) {
+      MarkdownASTNode *child = item.children[index];
+      if (child.type == MarkdownNodeTypeTable) {
+        flushRest();
+        ENRMTableSegment *table = [ENRMTableSegment segmentWithTableNode:child];
+        table.liftKey = liftKey;
+        [pieces addObject:table];
+      } else if (ENRMIsLiftingChild(child)) {
+        flushRest();
+        ENRMLiftTablesFromList(child, continuationWrap, pieces, nextLiftKey);
+      } else {
+        [rest addObject:child];
+      }
+    }
+    flushRest();
+  }
+  flushFragment();
+}
+
+// The pieces ENRMLiftTablesFromList splits `list` into. Only the first keeps the list's top margin and
+// only the last its bottom one, so the pieces sit as the list's items did and a table adds just its own.
+static NSArray *ENRMListPiecesAroundLiftedTables(MarkdownASTNode *list, NSInteger *nextLiftKey)
+{
+  NSMutableArray *pieces = [NSMutableArray array];
+  ENRMLiftTablesFromList(
+      list, ^MarkdownASTNode *(MarkdownASTNode *fragment) { return fragment; }, pieces, nextLiftKey);
+  for (NSUInteger index = 0; index < pieces.count; index++) {
+    if (![pieces[index] isKindOfClass:[MarkdownASTNode class]])
+      continue;
+    MarkdownASTNode *node = pieces[index];
+    if (index > 0)
+      node.attributes[ENRMListNoMarginTopNodeAttribute] = @"true";
+    if (index + 1 < pieces.count)
+      node.attributes[ENRMListNoMarginBottomNodeAttribute] = @"true";
+  }
+  return pieces;
+}
+
 static NSArray *ENRMSplitASTIntoSegments(MarkdownASTNode *root)
 {
   NSMutableArray *segments = [NSMutableArray array];
   NSMutableArray *currentTextNodes = [NSMutableArray array];
+  NSInteger nextLiftKey = 0;
 
   for (MarkdownASTNode *child in root.children) {
+    if (ENRMIsListNode(child) && ENRMListHasLiftedTable(child)) {
+      for (id piece in ENRMListPiecesAroundLiftedTables(child, &nextLiftKey)) {
+        if ([piece isKindOfClass:[ENRMTableSegment class]]) {
+          if (currentTextNodes.count > 0) {
+            [segments addObject:[ENRMTextSegment segmentWithNodes:[currentTextNodes copy]]];
+            [currentTextNodes removeAllObjects];
+          }
+          [segments addObject:piece];
+        } else {
+          [currentTextNodes addObject:piece];
+        }
+      }
+      continue;
+    }
     NSString *blockSlotId = child.attributes[@"blockSlotId"];
     if (blockSlotId.length > 0) {
       // A React child replaces this block (BlockSlots.hpp stamps only the ids the
@@ -207,6 +413,7 @@ ENRMRenderSegments(MarkdownASTNode *ast, StyleConfig *config, BOOL allowTrailing
                                                     }];
   NSMutableArray<ENRMRenderedSegment *> *renderedSegments = [NSMutableArray array];
   NSInteger taskIndexOffset = startingTaskIndex;
+  NSMutableDictionary<NSString *, ENRMLiftedIndent *> *liftedIndents = [NSMutableDictionary dictionary];
 
   static const uint64_t kTableKindSalt = 0x7461626C00000000ULL;      // "tabl"
   static const uint64_t kMathKindSalt = 0x6D61746800000000ULL;       // "math"
@@ -224,14 +431,22 @@ ENRMRenderSegments(MarkdownASTNode *ast, StyleConfig *config, BOOL allowTrailing
       for (MarkdownASTNode *node in nodes) {
         taskItemCount += ENRMCountTaskItems(node);
       }
-      [renderedSegments
-          addObject:ENRMRenderTextSegment(nodes, config, allowTrailingMargin, allowFontScaling, maxFontSizeMultiplier,
-                                          lineBreakStrategy, blockquoteContent, writingDirectionMode, layoutDirection,
-                                          segmentIndex == lastTextIndex, taskIndexOffset, taskItemCount, cache)];
+      ENRMRenderedSegment *rendered =
+          ENRMRenderTextSegment(nodes, config, allowTrailingMargin, allowFontScaling, maxFontSizeMultiplier,
+                                lineBreakStrategy, blockquoteContent, writingDirectionMode, layoutDirection,
+                                segmentIndex == lastTextIndex, taskIndexOffset, taskItemCount, cache);
+      [renderedSegments addObject:rendered];
       taskIndexOffset += taskItemCount;
+      [liftedIndents addEntriesFromDictionary:rendered.textResult.context.liftedIndents];
     } else if ([segment isKindOfClass:[ENRMTableSegment class]]) {
       ENRMTableSegment *tableSegment = (ENRMTableSegment *)segment;
       uint64_t signature = ENRMSignatureForNode(tableSegment.tableNode) ^ kTableKindSalt;
+      if (tableSegment.liftKey) {
+        ENRMLiftedIndent *lift = liftedIndents[tableSegment.liftKey];
+        tableSegment.lift = lift;
+        signature = ENRMMixTaskIndexOffset(signature, (NSInteger)lround(lift.indent * 64));
+        signature = ENRMMixTaskIndexOffset(signature, lift.firstStrongDirection * 4 + lift.wordMajorityDirection + 8);
+      }
       if (imageSourceOverrides.count > 0) {
         signature = ENRMMixImageSourceOverrides(signature, @[ tableSegment.tableNode ], imageSourceOverrides);
       }
