@@ -345,15 +345,10 @@ object MarkdownExtractor {
   }
 
   private fun listMarker(listSpan: BaseListSpan): String {
-    val indent = "  ".repeat(listSpan.depth)
-
     // Text after a table lifted out of an item continues that item: indented past the list marker,
     // never past a task's checkbox too, which would make it an indented code block.
-    if (listSpan.continuesItem) {
-      val markerLength = listSpan.continuedNumber?.let { "$it. ".length } ?: "- ".length
-      return indent + " ".repeat(markerLength)
-    }
-    return indent +
+    if (listSpan.continuesItem) return contentIndent(listSpan)
+    return "  ".repeat(listSpan.depth) +
       when (listSpan) {
         is TaskListSpan -> "- ${if (listSpan.isChecked) "[x]" else "[ ]"} "
         is OrderedListSpan -> "${listSpan.itemNumber}. "
@@ -361,9 +356,13 @@ object MarkdownExtractor {
       }
   }
 
-  /** The column an item's text starts at; a task item's checkbox is part of its text. */
+  /**
+   * The column an item's text starts at; a task item's checkbox is part of its text. A continuation
+   * after a lifted table lines up under the number of the item it continues.
+   */
   private fun contentIndent(listSpan: BaseListSpan): String {
-    val markerWidth = if (listSpan is OrderedListSpan) "${listSpan.itemNumber}. ".length else 2
+    val number = listSpan.continuedNumber?.takeIf { listSpan.continuesItem } ?: (listSpan as? OrderedListSpan)?.itemNumber
+    val markerWidth = number?.let { "$it. ".length } ?: 2
     return " ".repeat(2 * listSpan.depth + markerWidth)
   }
 
