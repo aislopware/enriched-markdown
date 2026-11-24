@@ -31,8 +31,8 @@ import com.swmansion.enriched.markdown.segments.TextRenderCache
 import com.swmansion.enriched.markdown.segments.TextRenderResult
 import com.swmansion.enriched.markdown.segments.textRenderResult
 import com.swmansion.enriched.markdown.spoiler.SpoilerCapable
-import com.swmansion.enriched.markdown.spoiler.SpoilerOverlay
 import com.swmansion.enriched.markdown.spoiler.SpoilerOverlayDrawer
+import com.swmansion.enriched.markdown.spoiler.SpoilerOverlayMode
 import com.swmansion.enriched.markdown.styles.LinkPillContent
 import com.swmansion.enriched.markdown.styles.StyleConfig
 import com.swmansion.enriched.markdown.utils.common.BreakStrategyUtils
@@ -183,7 +183,14 @@ class EnrichedMarkdownText
     private var effectsAnimator: StreamingEffectsAnimator? = null
     override var spoilerOverlayDrawer: SpoilerOverlayDrawer? = null
       private set
-    var spoilerOverlay: SpoilerOverlay = SpoilerOverlay.PARTICLES
+
+    /** How unrevealed `||spoiler||` text is concealed. */
+    override var spoilerOverlay: SpoilerOverlayMode = SpoilerOverlayMode.PARTICLES
+      set(value) {
+        if (field == value) return
+        field = value
+        spoilerOverlayDrawer?.overlayMode = value
+      }
 
     private var pendingText: RenderedSegment.Text? = null
     private var pendingRenderedMarkdown = ""
@@ -575,7 +582,9 @@ class EnrichedMarkdownText
         patch.tailImageSpans.forEach { it.registerTextView(this) }
         changedFrom = patch.start
       } else {
-        text = rendered.styledText ?: return renderInFull()
+        val fullText = rendered.styledText ?: return renderInFull()
+        SpoilerOverlayDrawer.carryOverReveals(text, fullText)
+        text = fullText
         rendered.imageSpans.forEach { it.registerTextView(this) }
         accessibilityHelper.invalidateAccessibilityItems()
       }
@@ -862,7 +871,9 @@ class EnrichedMarkdownText
     }
 
     override fun onDetachedFromWindow() {
-      stopSpoilerAnimations()
+      // Kept, not cleared: the text stays concealed, and the next draw after reattaching picks the
+      // animation back up.
+      spoilerOverlayDrawer?.stop()
       // A detached view parks its renders, so a stream measures in full until it lays out again.
       MeasurementStore.clearLaidOutSize(id)
       super.onDetachedFromWindow()
@@ -883,11 +894,6 @@ class EnrichedMarkdownText
     override fun onDraw(canvas: Canvas) {
       super.onDraw(canvas)
       spoilerOverlayDrawer?.draw(canvas)
-    }
-
-    private fun stopSpoilerAnimations() {
-      spoilerOverlayDrawer?.stop()
-      spoilerOverlayDrawer = null
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

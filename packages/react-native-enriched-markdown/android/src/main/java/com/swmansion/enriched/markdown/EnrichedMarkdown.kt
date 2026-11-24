@@ -40,7 +40,8 @@ import com.swmansion.enriched.markdown.slots.BlockSlotRevealController
 import com.swmansion.enriched.markdown.slots.BlockSlotRevealTarget
 import com.swmansion.enriched.markdown.slots.EnrichedMarkdownBlockSlotView
 import com.swmansion.enriched.markdown.slots.SlotPlacements
-import com.swmansion.enriched.markdown.spoiler.SpoilerOverlay
+import com.swmansion.enriched.markdown.spoiler.SpoilerOverlayMode
+import com.swmansion.enriched.markdown.spoiler.forEachSpoilerCapableDescendant
 import com.swmansion.enriched.markdown.styles.ImageSourceOverride
 import com.swmansion.enriched.markdown.styles.LinkPillContent
 import com.swmansion.enriched.markdown.styles.StyleConfig
@@ -271,6 +272,7 @@ class EnrichedMarkdown(
   private var imageRequestHeaders: Map<String, String> = emptyMap()
   private var imageSourceOverrides: Map<String, ImageSourceOverride> = emptyMap()
   private var linkPillContent: Map<String, LinkPillContent> = emptyMap()
+  private var admonitionTitles: Map<String, String> = emptyMap()
 
   // Fabric children (the React slot views) live here, above the segments, so the
   // segment reconciler's child indices stay its own. Fabric positions them.
@@ -306,13 +308,13 @@ class EnrichedMarkdown(
   private var contextMenuItemTexts: List<String> = emptyList()
   var onContextMenuItemPressCallback: ((itemText: String, selectedText: String, selectionStart: Int, selectionEnd: Int) -> Unit)? = null
   var onSelectionCopyCallback: OnSelectionCopy? = null
-  var spoilerOverlay: SpoilerOverlay = SpoilerOverlay.PARTICLES
+  var spoilerOverlay: SpoilerOverlayMode
+    get() = dynamicProps.spoilerOverlay
     set(value) {
-      if (field == value) return
-      field = value
-      segmentViews.filterIsInstance<EnrichedMarkdownInternalText>().forEach {
-        it.spoilerOverlay = value
-      }
+      if (dynamicProps.spoilerOverlay == value) return
+      dynamicProps.spoilerOverlay = value
+      // Nested blockquotes and table cells draw spoilers too, so the whole tree is updated.
+      forEachSpoilerCapableDescendant(this) { it.spoilerOverlay = value }
     }
   var enableTaskListItemToggle: Boolean = true
     set(value) {
@@ -397,6 +399,7 @@ class EnrichedMarkdown(
     newConfig?.imageSourceOverrides = imageSourceOverrides
     newConfig?.linkPillContent = linkPillContent
     newConfig?.writingDirection = writingDirection
+    newConfig?.admonitionTitles = admonitionTitles
     if (markdownStyle == newConfig) return
     markdownStyle = newConfig
     dirtyFlags += DirtyFlag.RECREATE_SEGMENTS
@@ -408,6 +411,14 @@ class EnrichedMarkdown(
     if (imageRequestHeaders == headers) return
     imageRequestHeaders = headers
     markdownStyle?.imageRequestHeaders = headers
+    dirtyFlags += DirtyFlag.RECREATE_SEGMENTS
+    renderPending = true
+  }
+
+  fun setAdmonitionTitles(titles: Map<String, String>) {
+    if (admonitionTitles == titles) return
+    admonitionTitles = titles
+    markdownStyle?.admonitionTitles = titles
     dirtyFlags += DirtyFlag.RECREATE_SEGMENTS
     renderPending = true
   }
@@ -722,6 +733,7 @@ class EnrichedMarkdown(
           config.imageSourceOverrides = imageSourceOverrides
           config.linkPillContent = linkPillContent
           config.writingDirection = writingDirection
+          config.admonitionTitles = admonitionTitles
         }
     }
   }
@@ -1048,7 +1060,6 @@ class EnrichedMarkdown(
       return when (segment) {
         is RenderedSegment.Text -> {
           SegmentViewCreators.createTextView(segment, config).apply {
-            spoilerOverlay = this@EnrichedMarkdown.spoilerOverlay
             enableTaskListItemToggle = this@EnrichedMarkdown.enableTaskListItemToggle
           }
         }

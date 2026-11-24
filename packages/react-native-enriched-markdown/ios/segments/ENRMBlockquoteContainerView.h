@@ -1,4 +1,5 @@
 #pragma once
+#import "ENRMUIKit.h"
 
 #import "ENRMCodeBlockContainerView.h"
 #import "ENRMContainerNodeView.h"
@@ -25,8 +26,9 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
  * padding, so drawRect: only ever renders one accent bar plus the background for
  * this single level. This mirrors Android's BlockquoteContainerView.
  *
- * The content inset is applied via contentInsets (left = borderWidth + gapWidth
- * + padding, other edges = padding), reusing the geometry the commonmark
+ * The content inset is applied via contentInsets (the bar's edge = borderWidth +
+ * gapWidth + padding, other edges = padding; the bar is on the right in a
+ * right-to-left quote), reusing the geometry the commonmark
  * BlockquoteBorder draws for the in-text (list-nested) path, which stays
  * untouched. The base measure/layout already honor contentInsets.
  *
@@ -34,7 +36,7 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
  * change re-signs the whole subtree so the outer reconciler still reuses the
  * quote view.
  */
-@interface ENRMBlockquoteContainerView : ENRMContainerNodeView
+@interface ENRMBlockquoteContainerView : ENRMContainerNodeView <ENRMWritingDirectionTarget>
 
 - (instancetype)initWithConfig:(StyleConfig *)config;
 
@@ -56,7 +58,8 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
 // recursion so nested blocks keep counting in document order; wrapped ones lay
 // out at the inner width, as the views do. slotMeasurer sizes the block slots a
 // React child stands in for and records their frames; origin is this quote's
-// top-left in the host's content box, so the frames come out absolute.
+// top-left in the host's content box, so the frames come out absolute. The
+// writing direction picks the bar's side, so it must match the host view's.
 + (CGFloat)measureHeightForBlockquoteNode:(MarkdownASTNode *)node
                                    config:(StyleConfig *)config
                                  maxWidth:(CGFloat)maxWidth
@@ -65,6 +68,7 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
                         lineBreakStrategy:(NSLineBreakStrategy)lineBreakStrategy
                      writingDirectionMode:(ENRMWritingDirectionMode)writingDirectionMode
                   resolvedLayoutDirection:(NSWritingDirection)resolvedLayoutDirection
+                           outerDirection:(NSWritingDirection)outerDirection
                                wrapCursor:(nullable ENRMCodeBlockWrapCursor *)wrapCursor
                              slotMeasurer:(nullable ENRMBlockSlotMeasurer *)slotMeasurer
                                    origin:(CGPoint)origin;
@@ -74,11 +78,6 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
 // the host (root view or parent quote) at creation; propagated to nested quotes.
 @property (nonatomic, assign) BOOL allowFontScaling;
 @property (nonatomic, assign) NSLineBreakStrategy lineBreakStrategy;
-// The host's writingDirection mode and Yoga-resolved direction, applied to the quote's text and
-// tables as the root applies them to its own. Read when the node is applied; a change recreates
-// the host's segments.
-@property (nonatomic, assign) ENRMWritingDirectionMode writingDirectionMode;
-@property (nonatomic, assign) NSWritingDirection resolvedLayoutDirection;
 
 // YES when this quote is nested directly inside another quote. A nested quote
 // carries no vertical margin (only the outermost quote does, applied by the root
@@ -109,6 +108,13 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
 // the host at creation and pushed to this quote's children, recursing into
 // nested quotes, so they are labelled the same way top-level segments are.
 @property (nonatomic, strong, nullable) ENRMAccessibilityLabels *accessibilityLabels;
+
+// The host's writingDirection mode and Yoga-resolved direction, applied to the quote's text and
+// tables as the root applies them to its own. Read when the node is applied; a change recreates
+// the host's segments.
+@property (nonatomic, assign) ENRMWritingDirectionMode writingDirectionMode;
+@property (nonatomic, assign) NSWritingDirection resolvedLayoutDirection;
+@property (nonatomic, assign) NSWritingDirection outerDirection;
 
 @end
 

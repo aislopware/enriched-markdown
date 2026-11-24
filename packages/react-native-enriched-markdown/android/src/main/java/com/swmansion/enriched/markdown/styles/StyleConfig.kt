@@ -185,6 +185,8 @@ class StyleConfig(
   /** The `writingDirection` prop, here so nested tables and quotes measure and lay out with it. */
   var writingDirection: MarkdownWritingDirection = MarkdownWritingDirection.FIRST_STRONG
 
+  var admonitionTitles: Map<String, String> = emptyMap()
+
   val videoStyle: VideoStyle by lazy {
     val map =
       requireNotNull(style.getMap("video")) {
@@ -369,7 +371,8 @@ class StyleConfig(
       imageRequestHeaders == other.imageRequestHeaders &&
       imageSourceOverrides == other.imageSourceOverrides &&
       linkPillContent == other.linkPillContent &&
-      writingDirection == other.writingDirection
+      writingDirection == other.writingDirection &&
+      admonitionTitles == other.admonitionTitles
   }
 
   override fun hashCode(): Int {
@@ -401,6 +404,7 @@ class StyleConfig(
     result = 31 * result + imageSourceOverrides.hashCode()
     result = 31 * result + linkPillContent.hashCode()
     result = 31 * result + writingDirection.hashCode()
+    result = 31 * result + admonitionTitles.hashCode()
     return result
   }
 }

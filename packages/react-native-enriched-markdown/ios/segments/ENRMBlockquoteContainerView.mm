@@ -16,6 +16,7 @@
 #import "PasteboardUtils.h"
 #import "SegmentRenderer.h"
 #import "TableContainerView.h"
+#import <React/RCTI18nUtil.h>
 #if ENRICHED_MARKDOWN_MATH
 #import "ENRMMathContainerView.h"
 #endif
@@ -30,22 +31,15 @@
 // vertical inset provides the bottom gap, and per-segment margins between children
 // still apply (allowTrailingMargin only gates the last child's bottom margin). The
 // consumer's allowFontScaling / lineBreakStrategy are threaded through so the
-// quote's content honors them the same way the root document path does, and so
-// is the writing direction the root applies to its own text segments.
-static NSArray<ENRMRenderedSegment *> *
-ENRMRenderBlockquoteChildren(MarkdownASTNode *node, StyleConfig *config, BOOL allowFontScaling,
-                             NSLineBreakStrategy lineBreakStrategy, ENRMWritingDirectionMode writingDirectionMode,
-                             NSWritingDirection resolvedLayoutDirection, NSInteger taskIndexOffset)
+// quote's content honors them the same way the root document path does.
+static NSArray<ENRMRenderedSegment *> *ENRMRenderBlockquoteChildren(MarkdownASTNode *node, StyleConfig *config,
+                                                                    BOOL allowFontScaling,
+                                                                    NSLineBreakStrategy lineBreakStrategy,
+                                                                    NSInteger taskIndexOffset)
 {
-  NSArray<ENRMRenderedSegment *> *segments = ENRMRenderSegmentsFromAST(
-      node, config, /*allowTrailingMargin*/ NO, allowFontScaling, config.maxFontSizeMultiplier, lineBreakStrategy,
-      /*blockquoteContent*/ YES, taskIndexOffset);
-  for (ENRMRenderedSegment *segment in segments) {
-    if (segment.kind == ENRMSegmentKindText && segment.textResult) {
-      ENRMApplyWritingDirectionMode(segment.textResult.attributedText, writingDirectionMode, resolvedLayoutDirection);
-    }
-  }
-  return segments;
+  return ENRMRenderSegmentsFromAST(node, config, /*allowTrailingMargin*/ NO, allowFontScaling,
+                                   config.maxFontSizeMultiplier, lineBreakStrategy,
+                                   /*blockquoteContent*/ YES, taskIndexOffset);
 }
 
 // The admonition type ("note"/"tip"/…) for a node, or nil for a plain quote.
@@ -100,19 +94,127 @@ static CGFloat ENRMAdmonitionHeaderReservedHeight(StyleConfig *config, BOOL isAd
   return ENRMAdmonitionHeaderContentHeight(config) + ENRMAdmonitionHeaderToBodyGap(config);
 }
 
-static UIEdgeInsets ENRMBlockquoteContentInsetsForNode(StyleConfig *config, BOOL isAdmonition)
+static CGFloat ENRMBlockquoteLeadingInset(StyleConfig *config)
 {
-  CGFloat padding = config.blockquotePadding;
-  CGFloat left = ceil(config.blockquoteBorderWidth + config.blockquoteGapWidth + padding);
-  CGFloat top = ceil(padding + ENRMAdmonitionHeaderReservedHeight(config, isAdmonition));
-  CGFloat vertical = ceil(padding);
-  CGFloat right = ceil(padding);
-  return UIEdgeInsetsMake(top, left, vertical, right);
+  return ceil(config.blockquoteBorderWidth + config.blockquoteGapWidth + config.blockquotePadding);
 }
 
-static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
+static UIEdgeInsets ENRMBlockquoteContentInsetsForNode(StyleConfig *config, BOOL isAdmonition, BOOL isRTL)
 {
-  return ENRMBlockquoteContentInsetsForNode(config, NO);
+  CGFloat padding = config.blockquotePadding;
+  CGFloat leading = ENRMBlockquoteLeadingInset(config);
+  CGFloat top = ceil(padding + ENRMAdmonitionHeaderReservedHeight(config, isAdmonition));
+  CGFloat vertical = ceil(padding);
+  CGFloat trailing = ceil(padding);
+  return isRTL ? UIEdgeInsetsMake(top, trailing, vertical, leading)
+               : UIEdgeInsetsMake(top, leading, vertical, trailing);
+}
+
+// The first strong character in the node, as web's dir="auto" finds it: nested
+// quotes and tables count, code blocks, images and math do not.
+static NSWritingDirection ENRMFirstStrongDirectionInNode(MarkdownASTNode *node)
+{
+  switch (node.type) {
+    case MarkdownNodeTypeCodeBlock:
+    case MarkdownNodeTypeImage:
+    case MarkdownNodeTypeVideo:
+    case MarkdownNodeTypeLatexMathInline:
+    case MarkdownNodeTypeLatexMathDisplay:
+      return NSWritingDirectionNatural;
+    default:
+      break;
+  }
+  NSWritingDirection direction = ENRMFirstStrongDirection(node.content);
+  for (MarkdownASTNode *child in node.children) {
+    if (direction != NSWritingDirectionNatural) {
+      break;
+    }
+    direction = ENRMFirstStrongDirectionInNode(child);
+  }
+  return direction;
+}
+
+// The quote's prose for the word-majority mode, as desktop reads a block: code, images and math
+// count as whitespace, and each line ends a sentence, as in the markdown desktop reads.
+static void ENRMAppendProseInNode(MarkdownASTNode *node, NSMutableString *prose)
+{
+  switch (node.type) {
+    case MarkdownNodeTypeCode:
+    case MarkdownNodeTypeCodeBlock:
+    case MarkdownNodeTypeImage:
+    case MarkdownNodeTypeVideo:
+    case MarkdownNodeTypeLatexMathInline:
+    case MarkdownNodeTypeLatexMathDisplay:
+      [prose appendString:@" "];
+      return;
+    default:
+      break;
+  }
+  if (node.content.length > 0) {
+    [prose appendString:node.content];
+  }
+  for (MarkdownASTNode *child in node.children) {
+    ENRMAppendProseInNode(child, prose);
+  }
+  switch (node.type) {
+    case MarkdownNodeTypeParagraph:
+    case MarkdownNodeTypeHeading:
+    case MarkdownNodeTypeTableRow:
+    case MarkdownNodeTypeLineBreak:
+    case MarkdownNodeTypeSoftBreak:
+      [prose appendString:@"\n"];
+      break;
+    case MarkdownNodeTypeTableHeaderCell:
+    case MarkdownNodeTypeTableCell:
+      [prose appendString:@" "];
+      break;
+    default:
+      break;
+  }
+}
+
+// A nested quote takes the side of the quote around it, as web's dir="auto"
+// resolves only the outermost block. Otherwise the first strong character in
+// the quote, or most of its words in the word-majority mode, unless the mode forces a side; without one, the layout and then
+// the app decide.
+static BOOL ENRMBlockquoteIsRTL(MarkdownASTNode *node, ENRMWritingDirectionMode mode,
+                                NSWritingDirection layoutDirection, NSWritingDirection outerDirection)
+{
+  if (outerDirection != NSWritingDirectionNatural) {
+    return outerDirection == NSWritingDirectionRightToLeft;
+  }
+  NSWritingDirection direction = NSWritingDirectionNatural;
+  if (mode == ENRMWritingDirectionModeLTR) {
+    direction = NSWritingDirectionLeftToRight;
+  } else if (mode == ENRMWritingDirectionModeRTL) {
+    direction = NSWritingDirectionRightToLeft;
+  } else if (mode == ENRMWritingDirectionModeFirstStrong) {
+    direction = ENRMFirstStrongDirectionInNode(node);
+    if (direction == NSWritingDirectionNatural) {
+      direction = layoutDirection;
+    }
+  } else if (mode == ENRMWritingDirectionModeWordMajority) {
+    NSMutableString *prose = [NSMutableString string];
+    ENRMAppendProseInNode(node, prose);
+    direction = ENRMWordMajorityDirection(prose);
+    if (direction == NSWritingDirectionNatural) {
+      direction = layoutDirection;
+    }
+  }
+  if (direction == NSWritingDirectionNatural) {
+    return [[RCTI18nUtil sharedInstance] isRTL];
+  }
+  return direction == NSWritingDirectionRightToLeft;
+}
+
+static void ENRMApplyWritingDirectionToSegments(NSArray<ENRMRenderedSegment *> *segments, ENRMWritingDirectionMode mode,
+                                                NSWritingDirection layoutDirection)
+{
+  for (ENRMRenderedSegment *segment in segments) {
+    if (segment.kind == ENRMSegmentKindText) {
+      ENRMApplyWritingDirectionMode(segment.textResult.attributedText, mode, layoutDirection);
+    }
+  }
 }
 
 @interface ENRMBlockquoteContainerView ()
@@ -121,6 +223,7 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
 #endif
 // nil for a plain blockquote; the admonition type string otherwise.
 @property (nonatomic, copy, nullable) NSString *admonitionType;
+@property (nonatomic, assign) BOOL rightToLeft;
 @property (nonatomic, copy) NSString *cachedMarkdown;
 @property (nonatomic, copy) NSString *cachedPlainText;
 @end
@@ -137,13 +240,14 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
   self = [super initWithFrame:CGRectZero];
   if (self) {
     self.config = config;
-    self.contentInsets = ENRMBlockquoteContentInsets(config);
+    self.contentInsets = ENRMBlockquoteContentInsetsForNode(config, NO, NO);
     self.allowTrailingMargin = NO;
+    _writingDirectionMode = ENRMWritingDirectionModeFirstStrong;
+    _resolvedLayoutDirection = NSWritingDirectionNatural;
+    _outerDirection = NSWritingDirectionNatural;
     // Preserved prior defaults until the host overrides them at creation.
     _allowFontScaling = YES;
     _lineBreakStrategy = NSLineBreakStrategyNone;
-    _writingDirectionMode = ENRMWritingDirectionModeFirstStrong;
-    _resolvedLayoutDirection = NSWritingDirectionLeftToRight;
     _dynamicProps = [[ENRMDynamicBlockProps alloc] init];
     _cachedMarkdown = @"";
     _cachedPlainText = @"";
@@ -160,18 +264,54 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
 - (void)applyBlockquoteNode:(MarkdownASTNode *)node taskIndexOffset:(NSInteger)taskIndexOffset
 {
   self.admonitionType = ENRMAdmonitionTypeForNode(node);
-  self.contentInsets = ENRMBlockquoteContentInsetsForNode(self.config, self.admonitionType != nil);
   self.cachedMarkdown = markdownFromBlockquoteNode(node);
   self.cachedPlainText = plainTextFromASTNode(node);
   NSArray<ENRMRenderedSegment *> *rendered =
-      ENRMRenderBlockquoteChildren(node, self.config, self.allowFontScaling, self.lineBreakStrategy,
-                                   self.writingDirectionMode, self.resolvedLayoutDirection, taskIndexOffset);
+      ENRMRenderBlockquoteChildren(node, self.config, self.allowFontScaling, self.lineBreakStrategy, taskIndexOffset);
+  ENRMApplyWritingDirectionToSegments(rendered, self.writingDirectionMode, self.resolvedLayoutDirection);
+  self.rightToLeft =
+      ENRMBlockquoteIsRTL(node, self.writingDirectionMode, self.resolvedLayoutDirection, self.outerDirection);
+  self.contentInsets = ENRMBlockquoteContentInsetsForNode(self.config, self.admonitionType != nil, self.rightToLeft);
   [self applySegments:rendered reset:NO];
+  [self applySide:self.rightToLeft];
 #if !TARGET_OS_OSX
   [self setNeedsDisplay];
 #else
   self.needsDisplay = YES;
 #endif
+}
+
+- (void)setOuterDirection:(NSWritingDirection)outerDirection
+{
+  if (_outerDirection == outerDirection) {
+    return;
+  }
+  _outerDirection = outerDirection;
+  if (outerDirection != NSWritingDirectionNatural) {
+    [self applySide:outerDirection == NSWritingDirectionRightToLeft];
+  }
+}
+
+// Moves the bar, insets and header to one side, and hands the side to nested
+// quotes, which a parent's update can leave untouched.
+- (void)applySide:(BOOL)rightToLeft
+{
+  if (self.rightToLeft != rightToLeft) {
+    self.rightToLeft = rightToLeft;
+    self.contentInsets = ENRMBlockquoteContentInsetsForNode(self.config, self.admonitionType != nil, rightToLeft);
+    [self setNeedsLayout];
+#if !TARGET_OS_OSX
+    [self setNeedsDisplay];
+#else
+    self.needsDisplay = YES;
+#endif
+  }
+  NSWritingDirection side = rightToLeft ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
+  for (RCTUIView *view in self.segmentViews) {
+    if ([view isKindOfClass:[ENRMBlockquoteContainerView class]]) {
+      ((ENRMBlockquoteContainerView *)view).outerDirection = side;
+    }
+  }
 }
 
 - (void)setAccessibilityLabels:(ENRMAccessibilityLabels *)accessibilityLabels
@@ -244,10 +384,10 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                             TableContainerView *view = [[TableContainerView alloc] initWithConfig:config];
                             ENRMBlockquoteContainerView *strongSelf = weakSelf;
                             if (strongSelf) {
+                              ENRMSetWritingDirection(view, strongSelf.writingDirectionMode,
+                                                      strongSelf.resolvedLayoutDirection);
                               view.dynamicProps = strongSelf.dynamicProps;
                               view.accessibilityLabels = strongSelf.accessibilityLabels;
-                              view.writingDirectionMode = strongSelf.writingDirectionMode;
-                              view.resolvedLayoutDirection = strongSelf.resolvedLayoutDirection;
                               view.onLinkPress = ^(NSString *url) {
                                 ENRMBlockquoteContainerView *s = weakSelf;
                                 if (s.onLinkPress && url)
@@ -272,8 +412,8 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                             TableContainerView *tableView = (TableContainerView *)view;
                             ENRMBlockquoteContainerView *strongSelf = weakSelf;
                             if (strongSelf) {
-                              tableView.writingDirectionMode = strongSelf.writingDirectionMode;
-                              tableView.resolvedLayoutDirection = strongSelf.resolvedLayoutDirection;
+                              ENRMSetWritingDirection(tableView, strongSelf.writingDirectionMode,
+                                                      strongSelf.resolvedLayoutDirection);
                             }
                             tableView.lift = segment.tableSegment.lift;
                             [tableView applyTableNode:segment.tableSegment.tableNode];
@@ -316,10 +456,10 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                             view.nested = YES;
                             ENRMBlockquoteContainerView *strongSelf = weakSelf;
                             if (strongSelf) {
+                              ENRMSetWritingDirection(view, strongSelf.writingDirectionMode,
+                                                      strongSelf.resolvedLayoutDirection);
                               view.allowFontScaling = strongSelf.allowFontScaling;
                               view.lineBreakStrategy = strongSelf.lineBreakStrategy;
-                              view.writingDirectionMode = strongSelf.writingDirectionMode;
-                              view.resolvedLayoutDirection = strongSelf.resolvedLayoutDirection;
                               view.dynamicProps = strongSelf.dynamicProps;
                               view.accessibilityLabels = strongSelf.accessibilityLabels;
                               view.onCopyPress = strongSelf.onCopyPress;
@@ -351,9 +491,14 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                             return view;
                           }
                           updateView:^(RCTUIView *view, ENRMRenderedSegment *segment) {
-                            [(ENRMBlockquoteContainerView *)view
-                                applyBlockquoteNode:segment.blockquoteSegment.blockquoteNode
-                                    taskIndexOffset:segment.blockquoteSegment.taskIndexOffset];
+                            ENRMBlockquoteContainerView *quoteView = (ENRMBlockquoteContainerView *)view;
+                            ENRMBlockquoteContainerView *strongSelf = weakSelf;
+                            if (strongSelf) {
+                              ENRMSetWritingDirection(quoteView, strongSelf.writingDirectionMode,
+                                                      strongSelf.resolvedLayoutDirection);
+                            }
+                            [quoteView applyBlockquoteNode:segment.blockquoteSegment.blockquoteNode
+                                           taskIndexOffset:segment.blockquoteSegment.taskIndexOffset];
                           }]];
 
 #if ENRICHED_MARKDOWN_MATH
@@ -467,20 +612,21 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
                         lineBreakStrategy:(NSLineBreakStrategy)lineBreakStrategy
                      writingDirectionMode:(ENRMWritingDirectionMode)writingDirectionMode
                   resolvedLayoutDirection:(NSWritingDirection)resolvedLayoutDirection
+                           outerDirection:(NSWritingDirection)outerDirection
                                wrapCursor:(ENRMCodeBlockWrapCursor *)wrapCursor
                              slotMeasurer:(ENRMBlockSlotMeasurer *)slotMeasurer
                                    origin:(CGPoint)origin
 {
-  UIEdgeInsets insets = ENRMBlockquoteContentInsetsForNode(config, ENRMAdmonitionTypeForNode(node) != nil);
-  CGFloat innerWidth = MAX(maxWidth - insets.left - insets.right, 1);
-
   NSArray<ENRMRenderedSegment *> *rendered =
-      ENRMRenderBlockquoteChildren(node, config, allowFontScaling, lineBreakStrategy, writingDirectionMode,
-                                   resolvedLayoutDirection, /*taskIndexOffset*/ 0);
+      ENRMRenderBlockquoteChildren(node, config, allowFontScaling, lineBreakStrategy, /*taskIndexOffset*/ 0);
+  ENRMApplyWritingDirectionToSegments(rendered, writingDirectionMode, resolvedLayoutDirection);
+  BOOL isRTL = ENRMBlockquoteIsRTL(node, writingDirectionMode, resolvedLayoutDirection, outerDirection);
+  UIEdgeInsets insets = ENRMBlockquoteContentInsetsForNode(config, ENRMAdmonitionTypeForNode(node) != nil, isRTL);
+  CGFloat innerWidth = MAX(maxWidth - insets.left - insets.right, 1);
   CGFloat childrenHeight = ENRMMeasureSegmentsHeightViewFree(
       rendered, config, innerWidth, /*allowTrailingMargin*/ NO, pointScaleFactor, writingDirectionMode,
-      resolvedLayoutDirection, allowFontScaling, lineBreakStrategy, wrapCursor, slotMeasurer,
-      CGPointMake(origin.x + insets.left, origin.y + insets.top));
+      resolvedLayoutDirection, isRTL ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight, allowFontScaling,
+      lineBreakStrategy, wrapCursor, slotMeasurer, CGPointMake(origin.x + insets.left, origin.y + insets.top));
 
   return childrenHeight + insets.top + insets.bottom;
 }
@@ -493,7 +639,7 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
   CGRect bounds = self.bounds;
 
   // The rounded (or plain) box outline, shared by the background fill and the accent
-  // bar's clip so the bar's left corners follow the border radius.
+  // bar's clip so the bar's outer corners follow the border radius.
 #if !TARGET_OS_OSX
   UIBezierPath *boxPath = radius > 0 ? [UIBezierPath bezierPathWithRoundedRect:bounds cornerRadius:radius]
                                      : [UIBezierPath bezierPathWithRect:bounds];
@@ -516,7 +662,8 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
     RCTUIColor *borderColor =
         admonitionType ? [config admonitionColorForType:admonitionType] : config.blockquoteBorderColor;
     if (borderColor) {
-      CGRect barRect = CGRectMake(0, 0, borderWidth, bounds.size.height);
+      CGFloat barX = self.rightToLeft ? bounds.size.width - borderWidth : 0;
+      CGRect barRect = CGRectMake(barX, 0, borderWidth, bounds.size.height);
       [borderColor setFill];
 #if !TARGET_OS_OSX
       CGContextRef ctx = UIGraphicsGetCurrentContext();
@@ -538,18 +685,22 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
   }
 }
 
-// Draws the admonition header (tinted octicon + capitalized title) in the band
-// reserved at the top by the enlarged content inset. The view is flipped on
-// macOS, so the y-down icon path and text draw identically on both platforms.
+// Draws the admonition header (tinted octicon + title) in the band
+// reserved at the top by the enlarged content inset, on the bar's side. The view
+// is flipped on macOS, so the y-down icon path and text draw identically on both
+// platforms.
 - (void)drawAdmonitionHeaderForType:(NSString *)type config:(StyleConfig *)config
 {
   RCTUIColor *tint = [config admonitionColorForType:type];
+  BOOL rtl = self.rightToLeft;
+  CGFloat width = self.bounds.size.width;
   CGFloat padding = config.blockquotePadding;
-  CGFloat leftInset = ceil(config.blockquoteBorderWidth + config.blockquoteGapWidth + padding);
+  CGFloat leadingInset = ENRMBlockquoteLeadingInset(config);
+  CGFloat trailingInset = ceil(padding);
   CGFloat iconSize = ENRMAdmonitionIconSize(config);
   CGFloat headerHeight = ENRMAdmonitionHeaderContentHeight(config);
   CGFloat headerTop = ceil(padding);
-  CGFloat titleX = leftInset;
+  CGFloat titleInset = leadingInset;
 
   CGPathRef iconPath = ENRMAdmonitionIconPath(type);
   if (iconPath) {
@@ -560,26 +711,43 @@ static UIEdgeInsets ENRMBlockquoteContentInsets(StyleConfig *config)
 #endif
     if (ctx) {
       CGFloat scale = iconSize / ENRMAdmonitionIconViewBox;
+      CGFloat iconX = rtl ? width - leadingInset - iconSize : leadingInset;
       CGFloat iconY = headerTop + (headerHeight - iconSize) / 2.0;
       CGContextSaveGState(ctx);
-      CGContextTranslateCTM(ctx, leftInset, iconY);
+      CGContextTranslateCTM(ctx, iconX, iconY);
       CGContextScaleCTM(ctx, scale, scale);
       CGContextAddPath(ctx, iconPath);
       [tint setFill];
       CGContextFillPath(ctx);
       CGContextRestoreGState(ctx);
     }
-    titleX = leftInset + iconSize + round(iconSize * 0.4);
+    titleInset = leadingInset + iconSize + round(iconSize * 0.4);
   }
 
-  NSString *title = ENRMAdmonitionTitle(type);
-  UIFont *titleFont = ENRMAdmonitionTitleFont(config);
-  NSDictionary<NSAttributedStringKey, id> *attributes =
-      @{NSFontAttributeName : titleFont, NSForegroundColorAttributeName : tint};
+  NSString *title = [config admonitionTitleForType:type];
+  CGFloat titleWidth = width - trailingInset - titleInset;
+  if (title.length == 0 || titleWidth <= 0) {
+    return;
+  }
+  NSWritingDirection titleDirection = ENRMFirstStrongDirection(title);
+  NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
+  paragraph.lineBreakMode = NSLineBreakByTruncatingTail;
+  paragraph.baseWritingDirection = titleDirection != NSWritingDirectionNatural
+                                       ? titleDirection
+                                       : (rtl ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight);
+  paragraph.alignment = rtl ? NSTextAlignmentRight : NSTextAlignmentLeft;
+  NSDictionary<NSAttributedStringKey, id> *attributes = @{
+    NSFontAttributeName : ENRMAdmonitionTitleFont(config),
+    NSForegroundColorAttributeName : tint,
+    NSParagraphStyleAttributeName : paragraph,
+  };
   NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:title attributes:attributes];
-  CGSize titleSize = [attributed size];
-  CGFloat titleY = headerTop + (headerHeight - titleSize.height) / 2.0;
-  [attributed drawAtPoint:CGPointMake(titleX, titleY)];
+  CGFloat titleHeight = [attributed size].height;
+  CGFloat titleX = rtl ? trailingInset : titleInset;
+  CGFloat titleY = headerTop + (headerHeight - titleHeight) / 2.0;
+  [attributed drawWithRect:CGRectMake(titleX, titleY, titleWidth, ceil(titleHeight))
+                   options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingTruncatesLastVisibleLine
+                   context:nil];
 }
 
 #pragma mark - Context menu

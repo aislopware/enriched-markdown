@@ -81,6 +81,7 @@ object SegmentHeightMeasurer {
     slotMeasurer: BlockSlotMeasurer? = null,
     originXPx: Float = 0f,
     originYPx: Float = 0f,
+    quoteRightToLeft: Boolean? = null,
   ): Float =
     measure(
       segments,
@@ -96,6 +97,7 @@ object SegmentHeightMeasurer {
       originXPx,
       originYPx,
       nested = true,
+      quoteRightToLeft = quoteRightToLeft,
     ).heightPx
 
   private fun measure(
@@ -112,6 +114,7 @@ object SegmentHeightMeasurer {
     originXPx: Float,
     originYPx: Float,
     nested: Boolean,
+    quoteRightToLeft: Boolean? = null,
   ): StackMeasurement {
     val widthPx = ceil(contentWidthPx).toInt().coerceAtLeast(1)
     val lastIndex = segments.lastIndex
@@ -184,6 +187,7 @@ object SegmentHeightMeasurer {
               slotMeasurer,
               originXPx,
               originYPx + totalHeightPx,
+              quoteRightToLeft,
             )
           maxContentWidthPx = contentWidthPx
           if (!nested && includeBottomMargin) totalHeightPx += style.blockquoteStyle.marginBottom.toInt()

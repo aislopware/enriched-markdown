@@ -29,6 +29,7 @@ const NOT_LAYOUT = new Set([
   'linkContextMenuItems',
   'selectionMenuConfig',
   'accessibilityLabels',
+  'admonitionTitles',
   'lineBreakStrategyIOS',
   // Changes what a copied selection carries, not what is drawn.
   'selectionClipboardConfig',
