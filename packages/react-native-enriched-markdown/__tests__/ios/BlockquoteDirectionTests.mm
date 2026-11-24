@@ -122,6 +122,18 @@ static ENRMBlockquoteContainerView *ENRMQuoteDirectionNested(ENRMBlockquoteConta
                                                       mode:ENRMWritingDirectionModeFirstStrong
                                            layoutDirection:NSWritingDirectionRightToLeft]),
                         @"right", @"without a strong character the layout decides");
+  XCTAssertEqualObjects(ENRMQuoteDirectionSide([self quote:@"> StrictMode: يعيد العرض مرتين في التطوير\n"
+                                                      mode:ENRMWritingDirectionModeWordMajority
+                                           layoutDirection:NSWritingDirectionLeftToRight]),
+                        @"right", @"most of the words, not the first one");
+  XCTAssertEqualObjects(ENRMQuoteDirectionSide([self quote:@"> نص `one two three four`\n"
+                                                      mode:ENRMWritingDirectionModeWordMajority
+                                           layoutDirection:NSWritingDirectionLeftToRight]),
+                        @"right", @"inline code does not count");
+  XCTAssertEqualObjects(ENRMQuoteDirectionSide([self quote:@"> 12345\n"
+                                                      mode:ENRMWritingDirectionModeWordMajority
+                                           layoutDirection:NSWritingDirectionRightToLeft]),
+                        @"right", @"without words the layout decides");
 }
 
 - (void)testTheViewFreeMeasurementPicksTheSideOfTheView

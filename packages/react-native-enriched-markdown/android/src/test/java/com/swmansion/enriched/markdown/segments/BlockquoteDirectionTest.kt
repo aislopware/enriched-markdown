@@ -2,9 +2,11 @@ package com.swmansion.enriched.markdown.segments
 
 import com.swmansion.enriched.markdown.accessibility.AccessibilityLabels
 import com.swmansion.enriched.markdown.parser.MarkdownASTNode
+import com.swmansion.enriched.markdown.styles.StyleConfig
 import com.swmansion.enriched.markdown.test.MarkdownRenderTestSupport.styleConfig
 import com.swmansion.enriched.markdown.test.TestAstFactory.paragraph
 import com.swmansion.enriched.markdown.test.TestAstFactory.text
+import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirection
 import com.swmansion.enriched.markdown.utils.text.view.SelectionMenuConfig
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -28,36 +30,40 @@ class BlockquoteDirectionTest {
 
   private fun codeBlock(code: String) = MarkdownASTNode(MarkdownASTNode.NodeType.CodeBlock, children = listOf(text(code)))
 
-  private fun admonition(vararg children: MarkdownASTNode) =
-    BlockquoteContainerView(
-      context,
-      SegmentViewConfig(
-        context = context,
-        style = style,
-        allowFontScaling = true,
-        maxFontSizeMultiplier = 0f,
-        accessibilityLabels = AccessibilityLabels(),
-        selectionMenuConfig = SelectionMenuConfig(),
-        textBreakStrategy = "highQuality",
-        selectable = false,
-        selectionColor = null,
-        selectionHandleColor = null,
-        contextMenuItemTexts = emptyList(),
-        dynamicProps = DynamicBlockProps(),
-        onLinkPress = null,
-        onLinkLongPress = null,
-        onTaskListItemPress = null,
-        onContextMenuItemPress = null,
+  private fun admonition(vararg children: MarkdownASTNode) = admonition(style, *children)
+
+  private fun admonition(
+    style: StyleConfig,
+    vararg children: MarkdownASTNode,
+  ) = BlockquoteContainerView(
+    context,
+    SegmentViewConfig(
+      context = context,
+      style = style,
+      allowFontScaling = true,
+      maxFontSizeMultiplier = 0f,
+      accessibilityLabels = AccessibilityLabels(),
+      selectionMenuConfig = SelectionMenuConfig(),
+      textBreakStrategy = "highQuality",
+      selectable = false,
+      selectionColor = null,
+      selectionHandleColor = null,
+      contextMenuItemTexts = emptyList(),
+      dynamicProps = DynamicBlockProps(),
+      onLinkPress = null,
+      onLinkLongPress = null,
+      onTaskListItemPress = null,
+      onContextMenuItemPress = null,
+    ),
+  ).apply {
+    applyBlockquoteNode(
+      MarkdownASTNode(
+        MarkdownASTNode.NodeType.Admonition,
+        attributes = mapOf("admonitionType" to "tip"),
+        children = children.toList(),
       ),
-    ).apply {
-      applyBlockquoteNode(
-        MarkdownASTNode(
-          MarkdownASTNode.NodeType.Admonition,
-          attributes = mapOf("admonitionType" to "tip"),
-          children = children.toList(),
-        ),
-      )
-    }
+    )
+  }
 
   @Test
   fun `the body's first strong character puts the bar on its side`() {
@@ -73,6 +79,21 @@ class BlockquoteDirectionTest {
 
     assertEquals(barInset, outer.paddingRight)
     assertEquals(barInset, nested.paddingRight)
+  }
+
+  @Test
+  fun `under word majority most of the quote's words put the bar on their side`() {
+    val wordMajority = styleConfig().apply { writingDirection = MarkdownWritingDirection.WORD_MAJORITY }
+    assertEquals(barInset, admonition(wordMajority, paragraph(text("StrictMode: يعيد العرض مرتين في التطوير"))).paddingRight)
+    assertEquals(
+      "inline code does not count",
+      barInset,
+      admonition(
+        wordMajority,
+        paragraph(text("نص "), MarkdownASTNode(MarkdownASTNode.NodeType.Code, children = listOf(text("one two three four")))),
+      ).paddingRight,
+    )
+    assertEquals(barInset, admonition(wordMajority, paragraph(text("A tip with one كلمة"))).paddingLeft)
   }
 
   @Test

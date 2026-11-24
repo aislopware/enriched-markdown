@@ -175,8 +175,8 @@ static void ENRMAppendProseInNode(MarkdownASTNode *node, NSMutableString *prose)
 
 // A nested quote takes the side of the quote around it, as web's dir="auto"
 // resolves only the outermost block. Otherwise the first strong character in
-// the quote, or most of its words in the word-majority mode, unless the mode forces a side; without one, the layout and then
-// the app decide.
+// the quote, or most of its words in the word-majority mode, unless the mode
+// forces a side; without one, the layout and then the app decide.
 static BOOL ENRMBlockquoteIsRTL(MarkdownASTNode *node, ENRMWritingDirectionMode mode,
                                 NSWritingDirection layoutDirection, NSWritingDirection outerDirection)
 {
