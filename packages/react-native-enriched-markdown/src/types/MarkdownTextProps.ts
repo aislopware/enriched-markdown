@@ -253,15 +253,6 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
    * @platform ios, android, web
    */
   stream?: MarkdownStream;
-  /** Clipboard metadata for selections containing an exact configured link URL.
-   * Replaces that link's plain copy text, wraps HTML with escaped attributes,
-   * and adds custom pasteboard types on iOS. No effect on rendering or layout.
-   */
-  selectionClipboard?: {
-    linkTextByUrl: Record<string, string>;
-    htmlAttributes?: Record<string, string>;
-    mimeTypes?: Record<string, string>;
-  };
   /**
    * Style configuration for markdown elements.
    * @platform ios, android, web
@@ -512,7 +503,8 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
    *   Choreographer-driven Canvas particles on Android).
    * - `'solid'`: opaque rectangle covering the text (Discord-style).
    *
-   * Both modes support tap-to-reveal.
+   * Both modes support tap-to-reveal. Web ignores this prop and always draws
+   * the solid cover.
    * @default 'particles'
    * @platform ios, android
    */
@@ -582,6 +574,15 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
    * @platform ios, android, macos
    */
   selectionMenuConfig?: SelectionMenuConfig;
+  /**
+   * How links appear in copied plain text (a selection, or a table's or
+   * quote's long-press Copy): `'label'` (the default) copies the link's text,
+   * `'markdown'` copies `[label](url)` so the URL survives a paste. Other
+   * clipboard formats are unchanged. Recognized links (`linkRecognition`) and
+   * autolinks, whose text is the URL, are copied as their text either way.
+   * @platform ios, android, macos
+   */
+  copyLinksAs?: 'label' | 'markdown';
   /**
    * Callback fired after a text selection is copied: from the selection menu's
    * Copy, Copy as Markdown, or Copy Image URL(s) item, the keyboard shortcut

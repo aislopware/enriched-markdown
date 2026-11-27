@@ -214,7 +214,6 @@ export const EnrichedMarkdownText = ({
   onLinkLongPress,
   onImagePress,
   onTextPress,
-  selectionClipboard,
   onTaskListItemPress,
   enableTaskListItemToggle = true,
   onCopyPress,
@@ -234,6 +233,7 @@ export const EnrichedMarkdownText = ({
   streamingConfig,
   onStreamingEnd,
   spoilerOverlay = 'particles',
+  copyLinksAs = 'label',
   contextMenuItems,
   linkContextMenuItems,
   imageRequestHeaders,
@@ -478,11 +478,13 @@ export const EnrichedMarkdownText = ({
 
   const handleSelectionCopy = useCallback(
     (e: NativeSyntheticEvent<NativeSelectionCopyEvent>) => {
-      const { text, format, selectionStart, selectionEnd } = e.nativeEvent;
+      const { text, format, selectionStart, selectionEnd, markdown } =
+        e.nativeEvent;
       onSelectionCopy?.({
         text,
         format: format as SelectionCopyEvent['format'],
         selection: { start: selectionStart, end: selectionEnd },
+        markdown,
       });
     },
     [onSelectionCopy]
@@ -600,11 +602,6 @@ export const EnrichedMarkdownText = ({
   );
   const resolvedAdmonitionTitles = useAdmonitionTitles(admonitionTitles);
 
-  const selectionClipboardConfig = useMemo(
-    () => (selectionClipboard ? JSON.stringify(selectionClipboard) : ''),
-    [selectionClipboard]
-  );
-
   // One parse on the JS thread serves both: the slot children land in the same
   // commit as the markdown they describe, the image sources before it is drawn.
   const nativeStream = nativeStreamOf(streamSnapshot);
@@ -638,7 +635,6 @@ export const EnrichedMarkdownText = ({
   useLinksChange(collected.links, onLinksChange, collected !== NOT_COLLECTED);
 
   const sharedProps = {
-    selectionClipboardConfig,
     ...streamProps(nativeStream, markdown),
     linkRecognition: nativeLinkRecognition,
     markdownStyle: normalizedStyle,
@@ -666,6 +662,7 @@ export const EnrichedMarkdownText = ({
     streamingConfig: normalizedStreamingConfig,
     onStreamingEnd: handleStreamingEnd,
     spoilerOverlay,
+    copyLinksAs,
     style: containerStyle,
     contextMenuItems: nativeContextMenuItems,
     linkContextMenuItems: nativeLinkContextMenuItems,

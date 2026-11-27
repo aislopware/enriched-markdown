@@ -2,7 +2,6 @@
 #include "CodeBlockHighlighter.hpp"
 #import "ENRMFontSlot.h"
 #import "FontUtils.h"
-#import <React/RCTUtils.h>
 
 static const NSInteger kENRMCodeBlockSyntaxColorCount =
     static_cast<NSInteger>(Markdown::HighlightTokenType::Embedded) + 1;
@@ -41,7 +40,7 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 @end
 
 @implementation StyleConfig {
-  BOOL _allowFontScaling;
+  CGFloat _fontScaleMultiplier;
   CGFloat _maxFontSizeMultiplier;
   // Primary font properties
   RCTUIColor *_primaryColor;
@@ -158,6 +157,7 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   NSDictionary<NSString *, NSString *> *_imageRequestHeaders;
   NSDictionary<NSString *, ENRMImageSourceOverride *> *_imageSourceOverrides;
   NSDictionary<NSString *, LinkPillContent *> *_linkPillContent;
+  BOOL _copyLinksAsMarkdown;
   // Video properties
   CGFloat _videoMarginTop;
   CGFloat _videoMarginBottom;
@@ -280,7 +280,7 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 - (instancetype)init
 {
   self = [super init];
-  _allowFontScaling = YES;
+  _fontScaleMultiplier = 1.0;
   _maxFontSizeMultiplier = 0;
   _paragraphTextAlign = NSTextAlignmentNatural;
   _h1TextAlign = NSTextAlignmentNatural;
@@ -325,32 +325,29 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)fontScaleMultiplier
 {
-  return _allowFontScaling ? RCTFontSizeMultiplier() : 1.0;
+  return _fontScaleMultiplier;
 }
 
 - (CGFloat)lineHeightForLinkPill:(LinkPillConfig *)pill
 {
-  if (_allowFontScaling && pill.lineHeight > 0) {
-    return pill.lineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (pill.lineHeight > 0) {
+    return pill.lineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return pill.lineHeight;
 }
 
+// A snapshot taken on main: rendering can run on the layout thread, so it never reads UIKit.
 - (void)setFontScaleMultiplier:(CGFloat)newValue
 {
-  BOOL newAllowFontScaling = (newValue != 1.0);
-  if (_allowFontScaling != newAllowFontScaling) {
-    _allowFontScaling = newAllowFontScaling;
+  if (_fontScaleMultiplier != newValue) {
+    _fontScaleMultiplier = newValue;
     [self invalidateAllFonts];
   }
 }
 
 - (CGFloat)effectiveScaleMultiplierForFontSize:(CGFloat)fontSize
 {
-  if (!_allowFontScaling) {
-    return 1.0;
-  }
-  return RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  return ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
 }
 
 - (CGFloat)maxFontSizeMultiplier
@@ -371,7 +368,7 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   // -init creates fresh ENRMFontSlot instances with needsRecreation = YES,
   // so all cached fonts will be rebuilt from the copied params below.
   StyleConfig *copy = [[[self class] allocWithZone:zone] init];
-  copy->_allowFontScaling = _allowFontScaling;
+  copy->_fontScaleMultiplier = _fontScaleMultiplier;
   copy->_maxFontSizeMultiplier = _maxFontSizeMultiplier;
   copy->_primaryColor = [_primaryColor copy];
   copy->_primaryFontSize = [_primaryFontSize copy];
@@ -461,10 +458,10 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   copy->_imageBorderRadius = _imageBorderRadius;
   copy->_imageMarginTop = _imageMarginTop;
   copy->_imageMarginBottom = _imageMarginBottom;
-  copy.selectionClipboard = self.selectionClipboard;
   copy->_imageRequestHeaders = [_imageRequestHeaders copy];
   copy->_imageSourceOverrides = [_imageSourceOverrides copy];
   copy->_linkPillContent = [_linkPillContent copy];
+  copy->_copyLinksAsMarkdown = _copyLinksAsMarkdown;
   copy->_videoMarginTop = _videoMarginTop;
   copy->_videoMarginBottom = _videoMarginBottom;
   copy->_videoBorderRadius = _videoBorderRadius;
@@ -688,8 +685,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)paragraphLineHeight
 {
-  if (_allowFontScaling && _paragraphLineHeight > 0) {
-    return _paragraphLineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_paragraphLineHeight > 0) {
+    return _paragraphLineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _paragraphLineHeight;
 }
@@ -785,8 +782,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)h1LineHeight
 {
-  if (_allowFontScaling && _h1LineHeight > 0) {
-    return _h1LineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_h1LineHeight > 0) {
+    return _h1LineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _h1LineHeight;
 }
@@ -881,8 +878,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)h2LineHeight
 {
-  if (_allowFontScaling && _h2LineHeight > 0) {
-    return _h2LineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_h2LineHeight > 0) {
+    return _h2LineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _h2LineHeight;
 }
@@ -977,8 +974,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)h3LineHeight
 {
-  if (_allowFontScaling && _h3LineHeight > 0) {
-    return _h3LineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_h3LineHeight > 0) {
+    return _h3LineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _h3LineHeight;
 }
@@ -1073,8 +1070,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)h4LineHeight
 {
-  if (_allowFontScaling && _h4LineHeight > 0) {
-    return _h4LineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_h4LineHeight > 0) {
+    return _h4LineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _h4LineHeight;
 }
@@ -1169,8 +1166,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)h5LineHeight
 {
-  if (_allowFontScaling && _h5LineHeight > 0) {
-    return _h5LineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_h5LineHeight > 0) {
+    return _h5LineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _h5LineHeight;
 }
@@ -1265,8 +1262,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)h6LineHeight
 {
-  if (_allowFontScaling && _h6LineHeight > 0) {
-    return _h6LineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_h6LineHeight > 0) {
+    return _h6LineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _h6LineHeight;
 }
@@ -1597,6 +1594,16 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   _imageMarginBottom = newValue;
 }
 
+- (BOOL)copyLinksAsMarkdown
+{
+  return _copyLinksAsMarkdown;
+}
+
+- (void)setCopyLinksAsMarkdown:(BOOL)newValue
+{
+  _copyLinksAsMarkdown = newValue;
+}
+
 - (NSDictionary<NSString *, NSString *> *)imageRequestHeaders
 {
   return _imageRequestHeaders;
@@ -1758,8 +1765,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)blockquoteLineHeight
 {
-  if (_allowFontScaling && _blockquoteLineHeight > 0) {
-    return _blockquoteLineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_blockquoteLineHeight > 0) {
+    return _blockquoteLineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _blockquoteLineHeight;
 }
@@ -1941,8 +1948,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
 
 - (CGFloat)listStyleLineHeight
 {
-  if (_allowFontScaling && _listStyleLineHeight > 0) {
-    return _listStyleLineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_listStyleLineHeight > 0) {
+    return _listStyleLineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _listStyleLineHeight;
 }
@@ -2148,8 +2155,8 @@ static const CGFloat kDefaultMinGap = 4.0;
 
 - (CGFloat)codeBlockLineHeight
 {
-  if (_allowFontScaling && _codeBlockLineHeight > 0) {
-    return _codeBlockLineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_codeBlockLineHeight > 0) {
+    return _codeBlockLineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _codeBlockLineHeight;
 }
@@ -2345,8 +2352,8 @@ static const CGFloat kDefaultMinGap = 4.0;
 
 - (CGFloat)tableLineHeight
 {
-  if (_allowFontScaling && _tableLineHeight > 0) {
-    return _tableLineHeight * RCTFontSizeMultiplierWithMax(_maxFontSizeMultiplier);
+  if (_tableLineHeight > 0) {
+    return _tableLineHeight * ENRMCapFontScale(_fontScaleMultiplier, _maxFontSizeMultiplier);
   }
   return _tableLineHeight;
 }

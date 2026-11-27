@@ -59,8 +59,8 @@ class EnrichedMarkdownManager :
     view.onContextMenuItemPressCallback = { itemText, selectedText, selectionStart, selectionEnd ->
       emitContextMenuItemPress(view, itemText, selectedText, selectionStart, selectionEnd)
     }
-    view.onSelectionCopyCallback = { text, format, selectionStart, selectionEnd ->
-      emitSelectionCopy(view, text, format, selectionStart, selectionEnd)
+    view.onSelectionCopyCallback = { text, format, selectionStart, selectionEnd, markdown ->
+      emitSelectionCopy(view, text, format, selectionStart, selectionEnd, markdown)
     }
 
     view.setOnLinkPressCallback { url ->
@@ -154,14 +154,6 @@ class EnrichedMarkdownManager :
   }
 
   override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> = markdownEventTypeConstants()
-
-  @ReactProp(name = "selectionClipboardConfig")
-  override fun setSelectionClipboardConfig(
-    view: EnrichedMarkdown?,
-    value: String?,
-  ) {
-    view?.setSelectionClipboardConfig(value)
-  }
 
   @ReactProp(name = "markdown")
   override fun setMarkdown(
@@ -364,6 +356,14 @@ class EnrichedMarkdownManager :
     mode: String?,
   ) {
     view?.spoilerOverlay = SpoilerOverlayMode.fromString(mode)
+  }
+
+  @ReactProp(name = "copyLinksAs")
+  override fun setCopyLinksAs(
+    view: EnrichedMarkdown?,
+    value: String?,
+  ) {
+    view?.copiesLinksAsMarkdown = value == "markdown"
   }
 
   @ReactProp(name = "textBreakStrategy")

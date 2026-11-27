@@ -226,6 +226,8 @@ static void ENRMApplyWritingDirectionToSegments(NSArray<ENRMRenderedSegment *> *
 @property (nonatomic, assign) BOOL rightToLeft;
 @property (nonatomic, copy) NSString *cachedMarkdown;
 @property (nonatomic, copy) NSString *cachedPlainText;
+// cachedPlainText with links as `[label](url)`, for `copyLinksAs: 'markdown'`.
+@property (nonatomic, copy) NSString *cachedLinkedPlainText;
 @end
 
 #if !TARGET_OS_OSX
@@ -266,6 +268,7 @@ static void ENRMApplyWritingDirectionToSegments(NSArray<ENRMRenderedSegment *> *
   self.admonitionType = ENRMAdmonitionTypeForNode(node);
   self.cachedMarkdown = markdownFromBlockquoteNode(node);
   self.cachedPlainText = plainTextFromASTNode(node);
+  self.cachedLinkedPlainText = plainTextWithMarkdownLinksFromASTNode(node);
   NSArray<ENRMRenderedSegment *> *rendered =
       ENRMRenderBlockquoteChildren(node, self.config, self.allowFontScaling, self.lineBreakStrategy, taskIndexOffset);
   ENRMApplyWritingDirectionToSegments(rendered, self.writingDirectionMode, self.resolvedLayoutDirection);
@@ -763,7 +766,7 @@ static void ENRMApplyWritingDirectionToSegments(NSArray<ENRMRenderedSegment *> *
 {
   if (_cachedPlainText.length > 0) {
     NSMutableDictionary *items = [NSMutableDictionary dictionary];
-    items[kUTIPlainText] = _cachedPlainText;
+    items[kUTIPlainText] = self.config.copyLinksAsMarkdown ? _cachedLinkedPlainText : _cachedPlainText;
     if (_cachedMarkdown.length > 0) {
       items[kUTIMarkdown] = _cachedMarkdown;
     }
