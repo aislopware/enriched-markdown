@@ -13,6 +13,7 @@
     "1. a\n\n1. b",
     "rebase the **feature** branch onto *main*",
     "checkout _detached_, drop ~~WIP~~, hide ||the token||",
+    "   ~~7~~",
     "read the [docs](https://git-scm.com) first",
     "***a***bcd",
     "**a*b***cd",

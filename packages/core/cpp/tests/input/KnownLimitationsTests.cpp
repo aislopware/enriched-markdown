@@ -101,5 +101,5 @@ TEST_CASE("known limitations") {
     }
     checked++;
   }
-  CHECK(checked == 10);
+  CHECK(checked == 9);
 }

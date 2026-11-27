@@ -40,8 +40,9 @@ export default defineConfig([
   {
     ignores: [
       'node_modules/',
-      // `yarn core:test` builds here, and CMake writes `compiler_depend.ts` files
-      'build/',
+      // `yarn core:test` builds here, and CMake writes `compiler_depend.ts` files;
+      // Gradle writes its test reports' scripts under each Android project's build/.
+      '**/build/',
       'packages/react-native-enriched-markdown/lib/',
       // Emscripten-generated WASM glue — not human-authored
       'packages/react-native-enriched-markdown/src/web/wasm/md4c.js',
