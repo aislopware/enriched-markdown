@@ -36,7 +36,8 @@ export interface CodeBlockPressEvent {
 
 /**
  * Event payload fired when a text selection is copied from the native
- * selection menu, with the keyboard shortcut, or through TalkBack.
+ * selection menu, with the keyboard shortcut, or through TalkBack, and when a
+ * table or quote is copied whole from its long-press menu.
  */
 export interface SelectionCopyEvent {
   /** What was put on the clipboard as plain text. */
@@ -50,12 +51,16 @@ export interface SelectionCopyEvent {
    * The copied range, in UTF-16 offsets of the rendered text. With
    * `flavor="github"` the offsets restart at each block that renders as its own
    * view, such as a table, code block or quote, so consecutive paragraphs count
-   * as one run of text.
+   * as one run of text. A table's or quote's long-press copy reports the whole
+   * block: `start` is 0 and `end` is the length of the block's text with links
+   * as their labels (what Copy writes with `copyLinksAs: 'label'`), so its Copy
+   * and Copy as Markdown report the same range.
    */
   selection: { start: number; end: number };
   /**
-   * The copied selection as Markdown, whatever the format: links keep their
-   * URLs here even when `text` has only their labels.
+   * The copied selection, or the copied table or quote, as Markdown, whatever
+   * the format: links keep their URLs here even when `text` has only their
+   * labels.
    */
   markdown: string;
 }

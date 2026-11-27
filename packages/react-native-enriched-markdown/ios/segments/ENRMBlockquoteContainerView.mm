@@ -391,6 +391,7 @@ static void ENRMApplyWritingDirectionToSegments(NSArray<ENRMRenderedSegment *> *
                                                       strongSelf.resolvedLayoutDirection);
                               view.dynamicProps = strongSelf.dynamicProps;
                               view.accessibilityLabels = strongSelf.accessibilityLabels;
+                              view.onSelectionCopy = strongSelf.onSelectionCopy;
                               view.onLinkPress = ^(NSString *url) {
                                 ENRMBlockquoteContainerView *s = weakSelf;
                                 if (s.onLinkPress && url)
@@ -755,22 +756,33 @@ static void ENRMApplyWritingDirectionToSegments(NSArray<ENRMRenderedSegment *> *
 
 #pragma mark - Context menu
 
+// A whole-quote copy reports the range of the quote's text with links as labels, whatever it wrote.
+- (void)reportCopy:(NSString *)text format:(NSString *)format
+{
+  if (self.onSelectionCopy) {
+    self.onSelectionCopy(text, format, NSMakeRange(0, _cachedPlainText.length), _cachedMarkdown);
+  }
+}
+
 - (void)copyMarkdownToPasteboard
 {
   if (_cachedMarkdown.length > 0) {
     copyStringToPasteboard(_cachedMarkdown);
+    [self reportCopy:_cachedMarkdown format:ENRMSelectionCopyFormatMarkdown];
   }
 }
 
 - (void)copyPlainTextToPasteboard
 {
   if (_cachedPlainText.length > 0) {
+    NSString *text = self.config.copyLinksAsMarkdown ? _cachedLinkedPlainText : _cachedPlainText;
     NSMutableDictionary *items = [NSMutableDictionary dictionary];
-    items[kUTIPlainText] = self.config.copyLinksAsMarkdown ? _cachedLinkedPlainText : _cachedPlainText;
+    items[kUTIPlainText] = text;
     if (_cachedMarkdown.length > 0) {
       items[kUTIMarkdown] = _cachedMarkdown;
     }
     copyItemsToPasteboard(items);
+    [self reportCopy:text format:ENRMSelectionCopyFormatPlain];
   }
 }
 

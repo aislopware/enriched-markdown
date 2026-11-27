@@ -94,7 +94,8 @@ typedef void (^ENRMBlockquoteLinkBlock)(NSString *url);
 @property (nonatomic, copy, nullable) void (^onTextPress)(NSInteger index, NSString *text);
 
 @property (nonatomic, copy, nullable) ENRMCodeBlockCopyBlock onCopyPress;
-/// Handed to every text view in this quote, nested quotes included, for the Copy key command.
+/// Reports the quote's long-press Copy and Copy as Markdown; handed to every text view and table in
+/// this quote, nested quotes included, for their copies.
 @property (nonatomic, copy, nullable) ENRMSelectionCopyHandler onSelectionCopy;
 @property (nonatomic, copy, nullable) ENRMCodeBlockPressBlock onCodeBlockPress;
 

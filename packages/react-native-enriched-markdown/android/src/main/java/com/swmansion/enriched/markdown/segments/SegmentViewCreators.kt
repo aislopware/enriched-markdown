@@ -177,6 +177,7 @@ object SegmentViewCreators {
     accessibilityLabels = config.accessibilityLabels
     onLinkPress = config.onLinkPress
     onLinkLongPress = config.onLinkLongPress
+    onSelectionCopy = config.onSelectionCopy
     updateTableView(this, segment)
   }
 

@@ -897,9 +897,9 @@ How links appear in copied plain text: a copied selection, and the **Copy** item
 
 ### `onSelectionCopy`
 
-Callback fired after a text selection is copied - from the selection menu's **Copy**, **Copy as Markdown**, or **Copy Image URL** item, the keyboard shortcut (⌘C / Ctrl+C), or TalkBack's copy action. Keyboard and TalkBack copies report `format: 'plain'`, the same as **Copy**. `text` is what was put on the clipboard as plain text, and `markdown` is the copied selection as Markdown, whatever the format, so links keep their URLs there even when `text` has only their labels. Code copied from a code block's header button or long-press menu is reported by [`onCopyPress`](#oncopypress) instead.
+Callback fired after text is copied - from the selection menu's **Copy**, **Copy as Markdown**, or **Copy Image URL** item, the keyboard shortcut (⌘C / Ctrl+C), TalkBack's copy action, or the **Copy** and **Copy as Markdown** items of a table's or quote's long-press menu, which copy the whole block. Keyboard and TalkBack copies report `format: 'plain'`, the same as **Copy**. `text` is what was put on the clipboard as plain text, and `markdown` is the copied selection as Markdown, whatever the format, so links keep their URLs there even when `text` has only their labels. Code copied from a code block's header button or long-press menu is reported by [`onCopyPress`](#oncopypress) instead.
 
-The `selection` offsets index the rendered text, not the Markdown source. With `flavor="github"` they restart at each block that renders as its own view, such as a table, code block or quote, so consecutive paragraphs count as one run of text.
+The `selection` offsets index the rendered text, not the Markdown source. With `flavor="github"` they restart at each block that renders as its own view, such as a table, code block or quote, so consecutive paragraphs count as one run of text. A table's or quote's long-press copy reports the whole block: `start` is 0 and `end` is the length of the block's text with links as their labels, so its **Copy** and **Copy as Markdown** report the same range.
 
 <PropInfo type="(event: SelectionCopyEvent) => void" />
 

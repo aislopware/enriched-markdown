@@ -16,9 +16,13 @@ import android.view.View
 import androidx.appcompat.view.menu.MenuBuilder
 import com.swmansion.enriched.markdown.EnrichedMarkdownInternalText
 import com.swmansion.enriched.markdown.EnrichedMarkdownText
+import com.swmansion.enriched.markdown.accessibility.AccessibilityLabels
 import com.swmansion.enriched.markdown.parser.MarkdownASTNode
 import com.swmansion.enriched.markdown.parser.MarkdownASTNode.NodeType
+import com.swmansion.enriched.markdown.segments.BlockquoteContainerView
 import com.swmansion.enriched.markdown.segments.DynamicBlockProps
+import com.swmansion.enriched.markdown.segments.SegmentViewConfig
+import com.swmansion.enriched.markdown.segments.TableContainerView
 import com.swmansion.enriched.markdown.spans.ImageSpan
 import com.swmansion.enriched.markdown.styles.StyleConfig
 import com.swmansion.enriched.markdown.test.MarkdownRenderTestSupport
@@ -191,6 +195,127 @@ class SelectionCopyTest {
       """see [x](https://x.y/p\(1\)) at https://a.b, [intranet](https://intranet) and www.example.com""",
       MarkdownASTSerializer.plainText(node, linksAsMarkdown = true),
     )
+  }
+
+  private fun node(
+    type: NodeType,
+    vararg children: MarkdownASTNode,
+  ) = MarkdownASTNode(type, children = children.toList())
+
+  // | a | b | over | [x](https://x.y) | y |
+  private fun linkedTable() =
+    node(
+      NodeType.Table,
+      node(
+        NodeType.TableHead,
+        node(NodeType.TableRow, node(NodeType.TableHeaderCell, text("a")), node(NodeType.TableHeaderCell, text("b"))),
+      ),
+      node(
+        NodeType.TableBody,
+        node(NodeType.TableRow, node(NodeType.TableCell, link("https://x.y", text("x"))), node(NodeType.TableCell, text("y"))),
+      ),
+    )
+
+  // Tables need the full style JS sends.
+  private fun blockStyle() = StyleConfig(MarkdownRenderTestSupport.exportStyleMap(), context, false, 0f)
+
+  private fun quoteView(
+    props: DynamicBlockProps,
+    onSelectionCopy: OnSelectionCopy,
+    vararg children: MarkdownASTNode,
+  ) = BlockquoteContainerView(
+    context,
+    SegmentViewConfig(
+      context = context,
+      style = blockStyle(),
+      allowFontScaling = true,
+      maxFontSizeMultiplier = 0f,
+      accessibilityLabels = AccessibilityLabels(),
+      selectionMenuConfig = SelectionMenuConfig(),
+      textBreakStrategy = "highQuality",
+      selectable = false,
+      selectionColor = null,
+      selectionHandleColor = null,
+      contextMenuItemTexts = emptyList(),
+      dynamicProps = props,
+      onLinkPress = null,
+      onLinkLongPress = null,
+      onTaskListItemPress = null,
+      onContextMenuItemPress = null,
+      onSelectionCopy = onSelectionCopy,
+    ),
+  ).apply { applyBlockquoteNode(node(NodeType.Blockquote, *children)) }
+
+  // A table's long-press copies report the whole table, with the plain text copyLinksAs wrote.
+  @Test
+  fun tableMenuCopiesReportTheWholeTable() {
+    val props = DynamicBlockProps()
+    val table = TableContainerView(context, blockStyle())
+    table.dynamicProps = props
+    val copies = mutableListOf<Copy>()
+    val markdowns = mutableListOf<String>()
+    table.onSelectionCopy = { text, format, s, e, md ->
+      copies += Copy(text, format, s, e)
+      markdowns += md
+    }
+    table.applyTableNode(linkedTable())
+    // "a\tb\nx\ty": the table's text with links as labels.
+    val end = 7
+
+    table.copyPlainText()
+    assertEquals(Copy("a\tb\nx\ty", SelectionCopyFormat.PLAIN, 0, end), copies.last())
+
+    props.copiesLinksAsMarkdown = true
+    table.copyPlainText()
+    val linked = "a\tb\n[x](https://x.y)\ty"
+    assertEquals(linked, clipboardText())
+    assertEquals(Copy(linked, SelectionCopyFormat.PLAIN, 0, end), copies.last())
+
+    table.copyMarkdown()
+    val markdown = clipboardText()!!
+    assertTrue(markdown, markdown.contains("| [x](https://x.y) | y |"))
+    assertEquals(Copy(markdown, SelectionCopyFormat.MARKDOWN, 0, end), copies.last())
+    assertEquals(listOf(markdown, markdown, markdown), markdowns)
+  }
+
+  // A quote's long-press copies report the whole quote, with the plain text copyLinksAs wrote.
+  @Test
+  fun blockquoteMenuCopiesReportTheWholeQuote() {
+    val props = DynamicBlockProps().apply { copiesLinksAsMarkdown = true }
+    val copies = mutableListOf<Copy>()
+    val markdowns = mutableListOf<String>()
+    val quote =
+      quoteView(props, { text, format, s, e, md ->
+        copies += Copy(text, format, s, e)
+        markdowns += md
+      }, paragraph(text("see "), link("https://x.y", text("x")), text(" now")))
+    // "see x now": the quote's text with links as labels.
+    val end = 9
+
+    quote.copyPlainText()
+    assertEquals("see [x](https://x.y) now", clipboardText())
+    quote.copyMarkdown()
+    val markdown = clipboardText()!!
+
+    assertEquals(
+      listOf(
+        Copy("see [x](https://x.y) now", SelectionCopyFormat.PLAIN, 0, end),
+        Copy(markdown, SelectionCopyFormat.MARKDOWN, 0, end),
+      ),
+      copies,
+    )
+    assertEquals(listOf(markdown, markdown), markdowns)
+  }
+
+  @Test
+  fun tableInBlockquoteReportsThroughTheQuote() {
+    val copies = mutableListOf<Copy>()
+    val quote = quoteView(DynamicBlockProps(), { text, format, s, e, _ -> copies += Copy(text, format, s, e) }, linkedTable())
+    val table = (0 until quote.childCount).map(quote::getChildAt).filterIsInstance<TableContainerView>().single()
+
+    table.copyPlainText()
+
+    assertEquals(listOf(Copy("a\tb\nx\ty", SelectionCopyFormat.PLAIN, 0, 7)), copies)
   }
 
   @Test

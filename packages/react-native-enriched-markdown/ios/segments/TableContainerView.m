@@ -816,16 +816,26 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
 }
 #endif // !TARGET_OS_OSX
 
+// A whole-table copy reports the range of the table's text with links as labels, whatever it wrote.
+- (void)reportCopy:(NSString *)text format:(NSString *)format
+{
+  if (self.onSelectionCopy) {
+    NSRange whole = NSMakeRange(0, [self buildPlainTextFromRows:NO].length);
+    self.onSelectionCopy(text, format, whole, _cachedMarkdown ?: @"");
+  }
+}
+
 - (void)copyMarkdownToPasteboard
 {
   if (_cachedMarkdown.length > 0) {
     copyStringToPasteboard(_cachedMarkdown);
+    [self reportCopy:_cachedMarkdown format:ENRMSelectionCopyFormatMarkdown];
   }
 }
 
 - (void)copyTableToPasteboard
 {
-  NSString *plainText = [self buildPlainTextFromRows];
+  NSString *plainText = [self buildPlainTextFromRows:self.config.copyLinksAsMarkdown];
   if (plainText.length == 0)
     return;
 
@@ -844,6 +854,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   }
 
   copyItemsToPasteboard(items);
+  [self reportCopy:plainText format:ENRMSelectionCopyFormatPlain];
 }
 
 - (NSString *)buildMarkdownFromRows
@@ -891,7 +902,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   return [markdown copy];
 }
 
-- (NSString *)buildPlainTextFromRows
+- (NSString *)buildPlainTextFromRows:(BOOL)linksAsMarkdown
 {
   if (_rows.count == 0)
     return @"";
@@ -902,7 +913,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
     NSMutableArray<NSString *> *rowContent = [NSMutableArray arrayWithCapacity:row.count];
 
     for (TableCellData *cell in row) {
-      NSString *text = (self.config.copyLinksAsMarkdown ? cell.linkedPlainText : nil) ?: cell.plainText;
+      NSString *text = (linksAsMarkdown ? cell.linkedPlainText : nil) ?: cell.plainText;
       [rowContent addObject:text ?: @""];
     }
 

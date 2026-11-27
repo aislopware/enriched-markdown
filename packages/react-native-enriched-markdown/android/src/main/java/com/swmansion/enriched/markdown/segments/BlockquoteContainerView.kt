@@ -26,6 +26,7 @@ import com.swmansion.enriched.markdown.utils.common.layout.MarkdownWritingDirect
 import com.swmansion.enriched.markdown.utils.common.layout.isLayoutRTL
 import com.swmansion.enriched.markdown.utils.common.layout.wordMajorityIsRtl
 import com.swmansion.enriched.markdown.utils.common.serialization.MarkdownASTSerializer
+import com.swmansion.enriched.markdown.utils.text.view.SelectionCopyFormat
 import com.swmansion.enriched.markdown.views.ContextMenuPopup
 import kotlin.math.ceil
 import kotlin.math.max
@@ -189,21 +190,39 @@ class BlockquoteContainerView(
 
   private fun showContextMenu(anchor: View): Boolean {
     if (!parentConfig.dynamicProps.enableBlockContextMenu) return false
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     ContextMenuPopup.show(anchor, this) {
-      item(ContextMenuPopup.Icon.COPY, parentConfig.dynamicProps.copyLabel) {
-        if (cachedPlainText.isNotEmpty()) {
-          val text = if (parentConfig.dynamicProps.copiesLinksAsMarkdown) cachedLinkedPlainText else cachedPlainText
-          clipboard.setPrimaryClip(ClipData.newPlainText("Blockquote", text))
-        }
-      }
-      item(ContextMenuPopup.Icon.DOCUMENT, parentConfig.dynamicProps.copyAsMarkdownLabel) {
-        if (cachedMarkdown.isNotEmpty()) {
-          clipboard.setPrimaryClip(ClipData.newPlainText("Blockquote", cachedMarkdown))
-        }
-      }
+      item(ContextMenuPopup.Icon.COPY, parentConfig.dynamicProps.copyLabel) { copyPlainText() }
+      item(ContextMenuPopup.Icon.DOCUMENT, parentConfig.dynamicProps.copyAsMarkdownLabel) { copyMarkdown() }
     }
     return true
+  }
+
+  /** The menu's Copy. */
+  internal fun copyPlainText() {
+    if (cachedPlainText.isEmpty()) return
+    val text = if (parentConfig.dynamicProps.copiesLinksAsMarkdown) cachedLinkedPlainText else cachedPlainText
+    writeClip(text)
+    reportCopy(text, SelectionCopyFormat.PLAIN)
+  }
+
+  /** The menu's Copy as Markdown. */
+  internal fun copyMarkdown() {
+    if (cachedMarkdown.isEmpty()) return
+    writeClip(cachedMarkdown)
+    reportCopy(cachedMarkdown, SelectionCopyFormat.MARKDOWN)
+  }
+
+  private fun writeClip(text: String) {
+    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+      .setPrimaryClip(ClipData.newPlainText("Blockquote", text))
+  }
+
+  // A whole-quote copy reports the range of the quote's text with links as labels, whatever it wrote.
+  private fun reportCopy(
+    text: String,
+    format: SelectionCopyFormat,
+  ) {
+    parentConfig.onSelectionCopy?.invoke(text, format, 0, cachedPlainText.length, cachedMarkdown)
   }
 
   override fun onMeasure(

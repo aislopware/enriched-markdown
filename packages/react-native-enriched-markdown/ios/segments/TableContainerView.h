@@ -1,6 +1,7 @@
 #pragma once
 #import "ENRMDynamicBlockProps.h"
 #import "ENRMUIKit.h"
+#import "EditMenuUtils.h"
 #import "ParagraphStyleUtils.h"
 #import "StyleConfig.h"
 
@@ -44,6 +45,9 @@ typedef void (^TableLinkPressBlock)(NSString *url);
 @property (nonatomic, copy, nullable) void (^onImagePress)(NSString *url, NSString *altText);
 
 @property (nonatomic, assign) BOOL enableLinkPreview;
+
+/// Reports the long-press Copy and Copy as Markdown of the whole table.
+@property (nonatomic, copy, nullable) ENRMSelectionCopyHandler onSelectionCopy;
 
 /// Set for a table from a list item: it starts at the item's text indent, on the side the item's text
 /// reads from, and does not overhang into the list's gutter.

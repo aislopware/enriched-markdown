@@ -1493,6 +1493,7 @@ static void ENRMPushWritingDirection(NSArray<RCTUIView *> *segmentViews, ENRMWri
   tableView.dynamicProps = _dynamicBlockProps;
   ENRMSetWritingDirection(tableView, _writingDirectionMode, _resolvedLayoutDirection);
   tableView.accessibilityLabels = _accessibilityLabels;
+  tableView.onSelectionCopy = [self selectionCopyHandler];
 
   __weak EnrichedMarkdown *weakSelf = self;
 

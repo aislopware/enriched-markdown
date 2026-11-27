@@ -49,6 +49,8 @@ import com.swmansion.enriched.markdown.utils.text.conversion.HTMLGenerator
 import com.swmansion.enriched.markdown.utils.text.extensions.replaceMathSpansWithPlaceholders
 import com.swmansion.enriched.markdown.utils.text.span.prepareWidthAwareSpans
 import com.swmansion.enriched.markdown.utils.text.view.LinkLongPressMovementMethod
+import com.swmansion.enriched.markdown.utils.text.view.OnSelectionCopy
+import com.swmansion.enriched.markdown.utils.text.view.SelectionCopyFormat
 import com.swmansion.enriched.markdown.utils.text.view.cancelJSTouchForLinkTap
 import com.swmansion.enriched.markdown.views.ContextMenuPopup
 import kotlin.math.ceil
@@ -73,6 +75,9 @@ class TableContainerView(
   var maxFontSizeMultiplier = 0f
   var onLinkPress: ((String) -> Unit)? = null
   var onLinkLongPress: ((String) -> Unit)? = null
+
+  /** Reports the long-press Copy and Copy as Markdown of the whole table. */
+  var onSelectionCopy: OnSelectionCopy? = null
   var accessibilityLabels: AccessibilityLabels = AccessibilityLabels()
     set(value) {
       if (field == value) return
@@ -565,29 +570,49 @@ class TableContainerView(
 
   private fun showContextMenu(anchor: View): Boolean {
     if (!dynamicProps.enableBlockContextMenu) return false
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     ContextMenuPopup.show(anchor, this) {
-      item(ContextMenuPopup.Icon.COPY, dynamicProps.copyLabel) {
-        val linksAsMarkdown = dynamicProps.copiesLinksAsMarkdown
-        val plainText =
-          rows.joinToString("\n") { row ->
-            row.joinToString("\t") { (if (linksAsMarkdown) it.linkedPlainText else null) ?: it.plainText }
-          }
-        if (plainText.isNotEmpty()) {
-          val displayMetrics = context.resources.displayMetrics
-          val tableRows =
-            rows.map { row ->
-              row.map { cell -> Triple(cell.attributedText as CharSequence, cell.isHeader, cell.alignment) }
-            }
-          val html = HTMLGenerator.generateTableHTML(tableRows, styleConfig, displayMetrics.scaledDensity, displayMetrics.density)
-          clipboard.setPrimaryClip(ClipData.newHtmlText("Table", plainText, html))
-        }
-      }
-      item(ContextMenuPopup.Icon.DOCUMENT, dynamicProps.copyAsMarkdownLabel) {
-        if (tableMarkdown.isNotEmpty()) clipboard.setPrimaryClip(ClipData.newPlainText("Table", tableMarkdown))
-      }
+      item(ContextMenuPopup.Icon.COPY, dynamicProps.copyLabel) { copyPlainText() }
+      item(ContextMenuPopup.Icon.DOCUMENT, dynamicProps.copyAsMarkdownLabel) { copyMarkdown() }
     }
     return true
+  }
+
+  private fun plainText(linksAsMarkdown: Boolean): String =
+    rows.joinToString("\n") { row ->
+      row.joinToString("\t") { (if (linksAsMarkdown) it.linkedPlainText else null) ?: it.plainText }
+    }
+
+  /** The menu's Copy: the cells as tab-separated plain text, with HTML. */
+  internal fun copyPlainText() {
+    val plainText = plainText(dynamicProps.copiesLinksAsMarkdown)
+    if (plainText.isEmpty()) return
+    val displayMetrics = context.resources.displayMetrics
+    val tableRows =
+      rows.map { row ->
+        row.map { cell -> Triple(cell.attributedText as CharSequence, cell.isHeader, cell.alignment) }
+      }
+    val html = HTMLGenerator.generateTableHTML(tableRows, styleConfig, displayMetrics.scaledDensity, displayMetrics.density)
+    writeClip(ClipData.newHtmlText("Table", plainText, html))
+    reportCopy(plainText, SelectionCopyFormat.PLAIN)
+  }
+
+  /** The menu's Copy as Markdown. */
+  internal fun copyMarkdown() {
+    if (tableMarkdown.isEmpty()) return
+    writeClip(ClipData.newPlainText("Table", tableMarkdown))
+    reportCopy(tableMarkdown, SelectionCopyFormat.MARKDOWN)
+  }
+
+  private fun writeClip(clip: ClipData) {
+    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+  }
+
+  // A whole-table copy reports the range of the table's text with links as labels, whatever it wrote.
+  private fun reportCopy(
+    text: String,
+    format: SelectionCopyFormat,
+  ) {
+    onSelectionCopy?.invoke(text, format, 0, plainText(linksAsMarkdown = false).length, tableMarkdown)
   }
 
   private fun buildMarkdownFromRows(): String =

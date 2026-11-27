@@ -584,11 +584,12 @@ export interface EnrichedMarkdownTextProps extends Omit<ViewProps, 'style'> {
    */
   copyLinksAs?: 'label' | 'markdown';
   /**
-   * Callback fired after a text selection is copied: from the selection menu's
-   * Copy, Copy as Markdown, or Copy Image URL(s) item, the keyboard shortcut
-   * (⌘C / Ctrl+C), or TalkBack's copy action. Receives the copied text, its
-   * format, and the copied range. Code block copies are reported by
-   * `onCopyPress` instead.
+   * Callback fired after text is copied: from the selection menu's Copy, Copy
+   * as Markdown, or Copy Image URL(s) item, the keyboard shortcut (⌘C /
+   * Ctrl+C), TalkBack's copy action, or the Copy and Copy as Markdown items of
+   * a table's or quote's long-press menu (`flavor="github"`), which copy the
+   * whole block. Receives the copied text, its format, and the copied range.
+   * Code block copies are reported by `onCopyPress` instead.
    * @platform ios, android, macos
    */
   onSelectionCopy?: (event: SelectionCopyEvent) => void;

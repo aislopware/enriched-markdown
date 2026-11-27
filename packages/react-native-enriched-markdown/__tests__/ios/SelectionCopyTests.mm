@@ -3,6 +3,7 @@
 #import "../../ios/parser/ENRMTextLinkAttributes.h"
 #import "../../ios/parser/MarkdownASTNode.h"
 #import "../../ios/segments/ENRMBlockquoteContainerView.h"
+#import "../../ios/segments/TableContainerView.h"
 #import "../../ios/styles/StyleConfig.h"
 #import "../../ios/utils/ENRMAccessibilityLabels.h"
 #import "../../ios/utils/ENRMTextRenderer.h"
@@ -13,6 +14,17 @@
 #import <XCTest/XCTest.h>
 
 @interface ENRMSelectionCopyTests : XCTestCase
+@end
+
+// What the long-press menus' Copy and Copy as Markdown items run.
+@interface TableContainerView (ENRMSelectionCopyTests)
+- (void)copyTableToPasteboard;
+- (void)copyMarkdownToPasteboard;
+@end
+
+@interface ENRMBlockquoteContainerView (ENRMSelectionCopyTests)
+- (void)copyPlainTextToPasteboard;
+- (void)copyMarkdownToPasteboard;
 @end
 
 @implementation ENRMSelectionCopyTests {
@@ -128,6 +140,80 @@ static void ENRMPerform(UIAction *action)
   XCTAssertEqualObjects(
       plainTextWithMarkdownLinksFromASTNode(quote),
       @"see [x](https://x.y/p\\(1\\)) at https://a.b, [intranet](https://intranet) and www.example.com");
+}
+
+// A table's long-press copies report the whole table, with the plain text copyLinksAs wrote.
+- (void)testTableMenuCopiesReportTheWholeTable
+{
+  StyleConfig *config = [[StyleConfig alloc] init];
+  TableContainerView *table = [[TableContainerView alloc] initWithConfig:config];
+  table.onSelectionCopy = [self recorder];
+  [table applyTableNode:ENRMParse(@"| a | b |\n|---|---|\n| [x](https://x.y) | y |\n").children.firstObject];
+  // "a\tb\nx\ty\n": the table's text with links as labels.
+  NSRange whole = NSMakeRange(0, 8);
+
+  [table copyTableToPasteboard];
+  XCTAssertEqualObjects(_copies.lastObject, ENRMCopy(@"a\tb\nx\ty\n", ENRMSelectionCopyFormatPlain, whole));
+
+  [config setCopyLinksAsMarkdown:YES];
+  [table copyTableToPasteboard];
+  NSString *linked = @"a\tb\n[x](https://x.y)\ty\n";
+  XCTAssertEqualObjects([UIPasteboard generalPasteboard].string, linked);
+  XCTAssertEqualObjects(_copies.lastObject, ENRMCopy(linked, ENRMSelectionCopyFormatPlain, whole));
+
+  [table copyMarkdownToPasteboard];
+  NSString *markdown = [UIPasteboard generalPasteboard].string;
+  XCTAssertTrue([markdown containsString:@"| [x](https://x.y) | y |"], @"%@", markdown);
+  XCTAssertEqualObjects(_copies.lastObject, ENRMCopy(markdown, ENRMSelectionCopyFormatMarkdown, whole));
+  XCTAssertEqual(_copies.count, 3u);
+  for (NSString *reported in _markdowns) {
+    XCTAssertEqualObjects(reported, markdown);
+  }
+}
+
+// A quote's long-press copies report the whole quote, with the plain text copyLinksAs wrote.
+- (void)testBlockquoteMenuCopiesReportTheWholeQuote
+{
+  StyleConfig *config = [[StyleConfig alloc] init];
+  [config setCopyLinksAsMarkdown:YES];
+  ENRMBlockquoteContainerView *quote = [[ENRMBlockquoteContainerView alloc] initWithConfig:config];
+  quote.accessibilityLabels = [ENRMAccessibilityLabels new];
+  quote.frame = CGRectMake(0, 0, 320, 1000);
+  quote.onSelectionCopy = [self recorder];
+  [quote applyBlockquoteNode:ENRMParse(@"> see [x](https://x.y) now\n").children.firstObject taskIndexOffset:0];
+  // "see x now": the quote's text with links as labels.
+  NSRange whole = NSMakeRange(0, 9);
+
+  [quote copyPlainTextToPasteboard];
+  XCTAssertEqualObjects([UIPasteboard generalPasteboard].string, @"see [x](https://x.y) now");
+  [quote copyMarkdownToPasteboard];
+  NSString *markdown = [UIPasteboard generalPasteboard].string;
+
+  XCTAssertEqualObjects(_copies, (@[
+                          ENRMCopy(@"see [x](https://x.y) now", ENRMSelectionCopyFormatPlain, whole),
+                          ENRMCopy(markdown, ENRMSelectionCopyFormatMarkdown, whole),
+                        ]));
+  XCTAssertEqualObjects(_markdowns, (@[ markdown, markdown ]));
+}
+
+- (void)testTableInBlockquoteReportsThroughTheQuote
+{
+  StyleConfig *config = [[StyleConfig alloc] init];
+  ENRMBlockquoteContainerView *quote = [[ENRMBlockquoteContainerView alloc] initWithConfig:config];
+  quote.accessibilityLabels = [ENRMAccessibilityLabels new];
+  quote.frame = CGRectMake(0, 0, 320, 1000);
+  quote.onSelectionCopy = [self recorder];
+  [quote applyBlockquoteNode:ENRMParse(@"> | a |\n> |---|\n> | b |\n").children.firstObject taskIndexOffset:0];
+
+  TableContainerView *table = nil;
+  for (RCTUIView *segment in quote.segmentViews) {
+    if ([segment isKindOfClass:[TableContainerView class]])
+      table = (TableContainerView *)segment;
+  }
+  XCTAssertNotNil(table);
+  [table copyTableToPasteboard];
+
+  XCTAssertEqualObjects(_copies, (@[ ENRMCopy(@"a\nb\n", ENRMSelectionCopyFormatPlain, NSMakeRange(0, 4)) ]));
 }
 
 // A recognized link touching an explicit one with the same URL stays text; the explicit one keeps its URL.
