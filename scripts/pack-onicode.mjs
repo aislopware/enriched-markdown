@@ -93,7 +93,7 @@ try {
       {
         repository: 'https://github.com/aislopware/enriched-markdown',
         commit: git('rev-parse', 'HEAD'),
-        upstreamCommit: '3a2c1ade8f54c8fb1a18b8f0db498dd0f7b49380',
+        upstreamCommit: '070099b662474bbe267b5ae55dd172e58089647d',
         version: pkg.version,
       },
       null,
