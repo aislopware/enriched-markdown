@@ -97,8 +97,9 @@ static void ENRMPerform(UIAction *action)
 {
   StyleConfig *config = [[StyleConfig alloc] init];
   ENRMRenderResult *result = ENRMRenderASTNodes(
-      ENRMParse(@"See [a \\[b\\] c](https://x.y/p\\(1\\)) and [sp](<https://x.y/a b>) at <https://a.b>").children,
-      config, NO, YES, 0, NSLineBreakStrategyStandard, 0);
+      // Balanced brackets: the fork reads an escaped `\[…\]` pair as display math.
+      ENRMParse(@"See [a [b] c](https://x.y/p\\(1\\)) and [sp](<https://x.y/a b>) at <https://a.b>").children, config,
+      NO, YES, 0, NSLineBreakStrategyStandard, 0);
   EnrichedMarkdownInternalText *view = [[EnrichedMarkdownInternalText alloc] initWithConfig:config];
   [view applyAttributedText:result.attributedText context:result.context];
   view.onSelectionCopy = [self recorder];
