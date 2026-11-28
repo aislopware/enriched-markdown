@@ -9,6 +9,8 @@ public struct MarkdownParsingOptions: Sendable, Equatable {
     /// Keeps backslashes that separate a Windows drive path (`C:\\Users\\me\\.config`)
     /// instead of treating them as escapes. Off by default; CommonMark drops them.
     public var preserveWindowsPaths: Bool
+    /// Lets `*`, `_` and `~~` open and close next to CJK punctuation, so `**「重要」**です` is bold.
+    public var cjkFriendly: Bool
     public var admonitions: Bool
 
     /// Set only via `MarkdownRenderPlugin.adjustParsingOptions` (the
@@ -24,6 +26,7 @@ public struct MarkdownParsingOptions: Sendable, Equatable {
         permissiveAutolinks: Bool = true,
         preserveBlankLines: Bool = false,
         preserveWindowsPaths: Bool = false,
+        cjkFriendly: Bool = false,
         admonitions: Bool = false
     ) {
         self.underline = underline
@@ -34,6 +37,7 @@ public struct MarkdownParsingOptions: Sendable, Equatable {
         self.permissiveAutolinks = permissiveAutolinks
         self.preserveBlankLines = preserveBlankLines
         self.preserveWindowsPaths = preserveWindowsPaths
+        self.cjkFriendly = cjkFriendly
         self.admonitions = admonitions
     }
 

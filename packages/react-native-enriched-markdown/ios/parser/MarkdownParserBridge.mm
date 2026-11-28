@@ -210,6 +210,7 @@ Markdown::Md4cFlags ENRMCoreMd4cFlags(ENRMMd4cFlags *flags)
   cppFlags.hardSoftBreaks = flags.hardSoftBreaks;
   cppFlags.preserveBlankLines = flags.preserveBlankLines;
   cppFlags.preserveWindowsPaths = flags.preserveWindowsPaths;
+  cppFlags.cjkFriendly = flags.cjkFriendly;
   cppFlags.admonitions = flags.admonitions;
   return cppFlags;
 }

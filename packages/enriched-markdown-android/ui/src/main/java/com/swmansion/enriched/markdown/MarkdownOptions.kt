@@ -23,6 +23,8 @@ data class MarkdownOptions(
   val preserveBlankLines: Boolean = false,
   /** Backslashes separating a Windows drive path (`C:\\Users\\me\\.config`) stay instead of acting as escapes. */
   val preserveWindowsPaths: Boolean = false,
+  /** `*`, `_` and `~~` open and close next to CJK punctuation, so `**「重要」**です` is bold. */
+  val cjkFriendly: Boolean = false,
   /** `> [!NOTE]` and the other GitHub alert blockquotes render as admonitions. */
   val admonitions: Boolean = false,
 ) {
@@ -38,6 +40,7 @@ data class MarkdownOptions(
       hardSoftBreaks = hardSoftBreaks,
       preserveBlankLines = preserveBlankLines,
       preserveWindowsPaths = preserveWindowsPaths,
+      cjkFriendly = cjkFriendly,
       admonitions = admonitions,
     )
 

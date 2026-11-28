@@ -701,6 +701,40 @@ struct MD_UNICODE_FOLD_INFO_tag {
         return (md_unicode_bsearch__(codepoint, PUNCT_MAP, SIZEOF_ARRAY(PUNCT_MAP)) >= 0);
     }
 
+    static int
+    md_is_cjk__(unsigned codepoint)
+    {
+#define R(cp_min, cp_max)   ((cp_min) | 0x40000000), ((cp_max) | 0x80000000)
+#define S(cp)               (cp)
+        /* "CJK character" of https://github.com/tats-u/markdown-cjk-friendly/blob/main/specification.md:
+         * East Asian Width W (without Emoji_Presentation), F or H, or Hangul, from U+1100 on.
+         * (generated from get-east-asian-width 1.7.0 and Unicode 17, as
+         * micromark-extension-cjk-friendly-util's cjkOrIvs() classifies) */
+        static const unsigned CJK_MAP[] = {
+            R(0x1100,0x11ff), S(0x20a9), R(0x2329,0x232a), R(0x2630,0x2637), R(0x268a,0x268f), R(0x2e80,0x2e99),
+            R(0x2e9b,0x2ef3), R(0x2f00,0x2fd5), R(0x2ff0,0x303e), R(0x3041,0x3096), R(0x3099,0x30ff),
+            R(0x3105,0x312f), R(0x3131,0x318e), R(0x3190,0x31e5), R(0x31ef,0x321e), R(0x3220,0x3247),
+            R(0x3250,0xa48c), R(0xa490,0xa4c6), R(0xa960,0xa97c), R(0xac00,0xd7a3), R(0xd7b0,0xd7c6),
+            R(0xd7cb,0xd7fb), R(0xf900,0xfaff), R(0xfe10,0xfe19), R(0xfe30,0xfe52), R(0xfe54,0xfe66),
+            R(0xfe68,0xfe6b), R(0xff01,0xffbe), R(0xffc2,0xffc7), R(0xffca,0xffcf), R(0xffd2,0xffd7),
+            R(0xffda,0xffdc), R(0xffe0,0xffe6), R(0xffe8,0xffee), R(0x16fe0,0x16fe4), R(0x16ff0,0x16ff6),
+            R(0x17000,0x18cda), R(0x18cff,0x18d20), R(0x18d80,0x18df2), R(0x18e00,0x19191), R(0x191a0,0x191d2),
+            R(0x1aff0,0x1aff3), R(0x1aff5,0x1affb), R(0x1affd,0x1affe), R(0x1b000,0x1b128), S(0x1b132),
+            R(0x1b150,0x1b152), S(0x1b155), R(0x1b164,0x1b168), R(0x1b170,0x1b2fb), R(0x1d300,0x1d356),
+            R(0x1d360,0x1d376), S(0x1f1ae), S(0x1f200), S(0x1f202), R(0x1f210,0x1f219), R(0x1f21b,0x1f22e),
+            R(0x1f230,0x1f231), S(0x1f237), S(0x1f23b), R(0x1f240,0x1f248), R(0x1f260,0x1f265), S(0x1f6d9),
+            S(0x1f7da), R(0x1fa8b,0x1fa8d), S(0x1facc), S(0x1fadd), S(0x1faeb), R(0x1faf9,0x1fafa),
+            R(0x20000,0x2fffd), R(0x30000,0x3fffd)
+        };
+#undef R
+#undef S
+
+        if(codepoint < 0x1100)
+            return 0;
+
+        return (md_unicode_bsearch__(codepoint, CJK_MAP, SIZEOF_ARRAY(CJK_MAP)) >= 0);
+    }
+
     static void
     md_get_unicode_fold_info(unsigned codepoint, MD_UNICODE_FOLD_INFO* info)
     {
@@ -1004,6 +1038,9 @@ struct MD_UNICODE_FOLD_INFO_tag {
         *p_size = 1;
         return (unsigned) str[off];
     }
+
+    #define md_is_unicode_punct__(codepoint)    ((codepoint) <= 0x7f  &&  ISPUNCT_(codepoint))
+    #define md_is_cjk__(codepoint)              0
 #endif
 
 
@@ -3291,6 +3328,113 @@ md_is_autolink(MD_CTX* ctx, OFF beg, OFF max_end, OFF* p_end, int* p_missing_mai
     return false;
 }
 
+/* Character classes of the markdown-cjk-friendly specification
+ * (https://github.com/tats-u/markdown-cjk-friendly/blob/main/specification.md). */
+#define MD_CJK_CLASS_WHITESPACE     0x01
+#define MD_CJK_CLASS_PUNCT          0x02    /* Unicode punctuation, CJK or not. */
+#define MD_CJK_CLASS_CJK            0x04
+#define MD_CJK_CLASS_IVS            0x08    /* Ideographic variation selector. */
+#define MD_CJK_CLASS_VS             0x10    /* Non-emoji general-use variation selector. */
+
+#define MD_CJK_IS_NONCJK_PUNCT(cls)         (((cls) & (MD_CJK_CLASS_PUNCT | MD_CJK_CLASS_CJK)) == MD_CJK_CLASS_PUNCT)
+#define MD_CJK_IS_SPACE_OR_NONCJK_PUNCT(cls) (((cls) & MD_CJK_CLASS_WHITESPACE)  ||  MD_CJK_IS_NONCJK_PUNCT(cls))
+
+static unsigned
+md_cjk_classify(unsigned codepoint)
+{
+    unsigned cls = 0;
+
+    if(ISUNICODEWHITESPACE_(codepoint)  ||  ISNEWLINE_(codepoint))
+        return MD_CJK_CLASS_WHITESPACE;
+    if(codepoint >= 0xfe00  &&  codepoint <= 0xfe0e)
+        return MD_CJK_CLASS_VS;
+    if(codepoint >= 0xe0100  &&  codepoint <= 0xe01ef)
+        return MD_CJK_CLASS_IVS;
+    if(md_is_cjk__(codepoint))
+        cls |= MD_CJK_CLASS_CJK;
+    if(md_is_unicode_punct__(codepoint))
+        cls |= MD_CJK_CLASS_PUNCT;
+    return cls;
+}
+
+/* Start of the character that ends at `off`, never before `beg`. */
+static OFF
+md_char_beg_before(MD_CTX* ctx, OFF beg, OFF off)
+{
+#if defined ENRMRKD_USE_UTF16
+    if(off >= beg + 2  &&  IS_UTF16_SURROGATE_HI(CH(off-2))  &&  IS_UTF16_SURROGATE_LO(CH(off-1)))
+        return off - 2;
+#elif defined ENRMRKD_USE_UTF8
+    OFF p = off - 1;
+    SZ size;
+
+    while(p > beg  &&  off - p < 4  &&  IS_UTF8_TAIL(CH(p)))
+        p--;
+    md_decode_unicode(ctx->text, p, ctx->size, &size);
+    if(p + size == off)
+        return p;
+#else
+    MD_UNUSED(ctx);
+    MD_UNUSED(beg);
+#endif
+    return off - 1;
+}
+
+/* Opener/closer flags of the delimiter run [off, end) under the markdown-cjk-friendly
+ * flanking rules, as micromark-extension-cjk-friendly implements them: punctuation
+ * that is CJK counts as a letter, so `**「重要」**です` is strong. */
+static unsigned
+md_cjk_friendly_flanking(MD_CTX* ctx, const MD_LINE* line, OFF off, OFF end, int is_underscore)
+{
+    unsigned before = MD_CJK_CLASS_WHITESPACE;
+    unsigned after = MD_CJK_CLASS_WHITESPACE;
+    unsigned flags = 0;
+    int can_open, can_close;
+    SZ size;
+
+    if(off > line->beg) {
+        OFF prev = md_char_beg_before(ctx, line->beg, off);
+        unsigned prev_cp = md_decode_unicode(ctx->text, prev, ctx->size, &size);
+
+        before = md_cjk_classify(prev_cp);
+        /* A variation selector takes the class of the character it modifies. */
+        if(before == MD_CJK_CLASS_VS  &&  prev > line->beg) {
+            OFF prev2 = md_char_beg_before(ctx, line->beg, prev);
+            unsigned prev2_cp = md_decode_unicode(ctx->text, prev2, ctx->size, &size);
+            unsigned prev2_cls = md_cjk_classify(prev2_cp);
+
+            if(!(prev2_cls & MD_CJK_CLASS_WHITESPACE)) {
+                if(prev_cp == 0xfe01  &&  (prev2_cp == 0x2018  ||  prev2_cp == 0x2019  ||  prev2_cp == 0x201c  ||  prev2_cp == 0x201d))
+                    before = MD_CJK_CLASS_CJK | MD_CJK_CLASS_PUNCT;
+                else
+                    before = prev2_cls & ~MD_CJK_CLASS_IVS;
+            }
+        }
+    }
+    if(end < line->end)
+        after = md_cjk_classify(md_decode_unicode(ctx->text, end, ctx->size, &size));
+
+    can_open = !MD_CJK_IS_SPACE_OR_NONCJK_PUNCT(after)  ||
+               (MD_CJK_IS_NONCJK_PUNCT(after)  &&
+                (MD_CJK_IS_SPACE_OR_NONCJK_PUNCT(before)  ||  (before & (MD_CJK_CLASS_CJK | MD_CJK_CLASS_IVS))));
+    can_close = !MD_CJK_IS_SPACE_OR_NONCJK_PUNCT(before)  ||
+                (MD_CJK_IS_NONCJK_PUNCT(before)  &&
+                 (MD_CJK_IS_SPACE_OR_NONCJK_PUNCT(after)  ||  (after & MD_CJK_CLASS_CJK)));
+
+    if(is_underscore) {
+        int open_ok = can_open  &&  ((before & (MD_CJK_CLASS_WHITESPACE | MD_CJK_CLASS_PUNCT))  ||  !can_close);
+        int close_ok = can_close  &&  ((after & (MD_CJK_CLASS_WHITESPACE | MD_CJK_CLASS_PUNCT))  ||  !can_open);
+        can_open = open_ok;
+        can_close = close_ok;
+    }
+
+    if(can_open)
+        flags |= MD_MARK_POTENTIAL_OPENER;
+    if(can_close)
+        flags |= MD_MARK_POTENTIAL_CLOSER;
+    return flags;
+}
+
 static int
 md_collect_marks(MD_CTX* ctx, const MD_LINE* lines, ENRMRKD_SIZE n_lines, int table_mode)
 {
@@ -3365,39 +3509,44 @@ md_collect_marks(MD_CTX* ctx, const MD_LINE* lines, ENRMRKD_SIZE n_lines, int ta
             /* A potential (string) emphasis start/end. */
             if(ch == _T('*')  ||  ch == _T('_')) {
                 OFF tmp = off+1;
-                int left_level;     /* What precedes: 0 = whitespace; 1 = punctuation; 2 = other char. */
-                int right_level;    /* What follows: 0 = whitespace; 1 = punctuation; 2 = other char. */
+                unsigned flags = 0;
 
                 while(tmp < line->end  &&  CH(tmp) == ch)
                     tmp++;
 
-                if(off == line->beg  ||  ISUNICODEWHITESPACEBEFORE(off))
-                    left_level = 0;
-                else if(ISUNICODEPUNCTBEFORE(off))
-                    left_level = 1;
-                else
-                    left_level = 2;
+                if(ctx->parser.flags & ENRMRKD_FLAG_CJKFRIENDLY) {
+                    flags = md_cjk_friendly_flanking(ctx, line, off, tmp, ch == _T('_'));
+                } else {
+                    int left_level;     /* What precedes: 0 = whitespace; 1 = punctuation; 2 = other char. */
+                    int right_level;    /* What follows: 0 = whitespace; 1 = punctuation; 2 = other char. */
 
-                if(tmp == line->end  ||  ISUNICODEWHITESPACE(tmp))
-                    right_level = 0;
-                else if(ISUNICODEPUNCT(tmp))
-                    right_level = 1;
-                else
-                    right_level = 2;
+                    if(off == line->beg  ||  ISUNICODEWHITESPACEBEFORE(off))
+                        left_level = 0;
+                    else if(ISUNICODEPUNCTBEFORE(off))
+                        left_level = 1;
+                    else
+                        left_level = 2;
 
-                /* Intra-word underscore doesn't have special meaning. */
-                if(ch == _T('_')  &&  left_level == 2  &&  right_level == 2) {
-                    left_level = 0;
-                    right_level = 0;
-                }
+                    if(tmp == line->end  ||  ISUNICODEWHITESPACE(tmp))
+                        right_level = 0;
+                    else if(ISUNICODEPUNCT(tmp))
+                        right_level = 1;
+                    else
+                        right_level = 2;
 
-                if(left_level != 0  ||  right_level != 0) {
-                    unsigned flags = 0;
+                    /* Intra-word underscore doesn't have special meaning. */
+                    if(ch == _T('_')  &&  left_level == 2  &&  right_level == 2) {
+                        left_level = 0;
+                        right_level = 0;
+                    }
 
                     if(left_level > 0  &&  left_level >= right_level)
                         flags |= MD_MARK_POTENTIAL_CLOSER;
                     if(right_level > 0  &&  right_level >= left_level)
                         flags |= MD_MARK_POTENTIAL_OPENER;
+                }
+
+                if(flags != 0) {
                     if(flags == (MD_MARK_POTENTIAL_OPENER | MD_MARK_POTENTIAL_CLOSER))
                         flags |= MD_MARK_EMPH_OC;
 
@@ -3674,14 +3823,19 @@ md_collect_marks(MD_CTX* ctx, const MD_LINE* lines, ENRMRKD_SIZE n_lines, int ta
                         ADD_MARK(ch, off, tmp, flags);
                 } else if(tmp - off <= 2  &&  (ctx->parser.flags & ENRMRKD_FLAG_STRIKETHROUGH)) {
                     /* Strikethrough: same flanking as `*` emphasis, as on GitHub. */
-                    int left_level = (off == line->beg  ||  ISUNICODEWHITESPACEBEFORE(off)) ? 0 : (ISUNICODEPUNCTBEFORE(off) ? 1 : 2);
-                    int right_level = (tmp == line->end  ||  ISUNICODEWHITESPACE(tmp)) ? 0 : (ISUNICODEPUNCT(tmp) ? 1 : 2);
                     unsigned flags = 0;
 
-                    if(left_level > 0  &&  left_level >= right_level)
-                        flags |= MD_MARK_POTENTIAL_CLOSER;
-                    if(right_level > 0  &&  right_level >= left_level)
-                        flags |= MD_MARK_POTENTIAL_OPENER;
+                    if(ctx->parser.flags & ENRMRKD_FLAG_CJKFRIENDLY) {
+                        flags = md_cjk_friendly_flanking(ctx, line, off, tmp, 0);
+                    } else {
+                        int left_level = (off == line->beg  ||  ISUNICODEWHITESPACEBEFORE(off)) ? 0 : (ISUNICODEPUNCTBEFORE(off) ? 1 : 2);
+                        int right_level = (tmp == line->end  ||  ISUNICODEWHITESPACE(tmp)) ? 0 : (ISUNICODEPUNCT(tmp) ? 1 : 2);
+
+                        if(left_level > 0  &&  left_level >= right_level)
+                            flags |= MD_MARK_POTENTIAL_CLOSER;
+                        if(right_level > 0  &&  right_level >= left_level)
+                            flags |= MD_MARK_POTENTIAL_OPENER;
+                    }
                     if(flags != 0)
                         ADD_MARK(ch, off, tmp, flags);
                 }

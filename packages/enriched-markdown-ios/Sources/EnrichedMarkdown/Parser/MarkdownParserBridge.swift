@@ -19,6 +19,7 @@ enum MarkdownParserBridge {
                 options.permissiveAutolinks ? 1 : 0,
                 options.preserveBlankLines ? 1 : 0,
                 options.preserveWindowsPaths ? 1 : 0,
+                options.cjkFriendly ? 1 : 0,
                 options.admonitions ? 1 : 0
             ) else {
                 return MarkdownASTNode(type: .document)

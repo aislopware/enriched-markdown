@@ -64,6 +64,7 @@ public struct MarkdownParsingOptions: Sendable, Equatable {
   public var permissiveAutolinks: Bool  // true
   public var preserveBlankLines: Bool   // false
   public var preserveWindowsPaths: Bool // false
+  public var cjkFriendly: Bool          // false
   public var admonitions: Bool          // false
 
   public static let commonMark: MarkdownParsingOptions
@@ -131,6 +132,12 @@ Keeps consecutive blank lines instead of collapsing them, so vertical whitespace
 #### `preserveWindowsPaths`
 
 When `true`, a backslash that separates a Windows drive path stays in the text instead of acting as an escape, so `C:\Users\me\.config` keeps every separator. CommonMark would render it as `C:\Users\me.config`. Escapes outside such a path, code spans, and link destinations are unchanged.
+
+<PropInfo type="Bool" default="false" />
+
+#### `cjkFriendly`
+
+When `true`, `*`, `_` and `~~` can open and close next to CJK punctuation, following the [markdown-cjk-friendly](https://github.com/tats-u/markdown-cjk-friendly) specification. `**「重要」**です` renders 「重要」 in bold, where CommonMark leaves the asterisks literal because `」` is punctuation followed by a letter. Text without CJK characters parses as before.
 
 <PropInfo type="Bool" default="false" />
 

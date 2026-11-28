@@ -1039,6 +1039,9 @@ std::shared_ptr<MarkdownASTNode> MD4CParser::parse(const std::string &markdown, 
   if (md4cFlags.preserveWindowsPaths) {
     flags |= ENRMRKD_FLAG_ESCAPEDTEXT;
   }
+  if (md4cFlags.cjkFriendly) {
+    flags |= ENRMRKD_FLAG_CJKFRIENDLY;
+  }
 
   // Configure MD4C parser with callbacks
   ENRMRKD_PARSER parser = {

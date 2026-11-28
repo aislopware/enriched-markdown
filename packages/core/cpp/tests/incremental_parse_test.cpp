@@ -113,6 +113,7 @@ std::vector<Variant> variants() {
   flags.options.flags.hardSoftBreaks = true;
   flags.options.flags.preserveBlankLines = true;
   flags.options.flags.preserveWindowsPaths = true;
+  flags.options.flags.cjkFriendly = true;
   all.push_back(flags);
   Variant plain{"commonmark, no math or admonitions", {}, false};
   plain.options.flags.latexMath = false;

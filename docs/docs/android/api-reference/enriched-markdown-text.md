@@ -119,6 +119,7 @@ data class MarkdownOptions(
   val hardSoftBreaks: Boolean = false,
   val preserveBlankLines: Boolean = false,
   val preserveWindowsPaths: Boolean = false,
+  val cjkFriendly: Boolean = false,
   val admonitions: Boolean = false,
 ) {
   companion object {
@@ -196,6 +197,12 @@ Keeps consecutive blank lines instead of collapsing them, so vertical whitespace
 #### `preserveWindowsPaths`
 
 When `true`, a backslash that separates a Windows drive path stays in the text instead of acting as an escape, so `C:\Users\me\.config` keeps every separator. CommonMark would render it as `C:\Users\me.config`. Escapes outside such a path, code spans, and link destinations are unchanged.
+
+<PropInfo type="Boolean" default="false" />
+
+#### `cjkFriendly`
+
+When `true`, `*`, `_` and `~~` can open and close next to CJK punctuation, following the [markdown-cjk-friendly](https://github.com/tats-u/markdown-cjk-friendly) specification. `**「重要」**です` renders 「重要」 in bold, where CommonMark leaves the asterisks literal because `」` is punctuation followed by a letter. Text without CJK characters parses as before.
 
 <PropInfo type="Boolean" default="false" />
 

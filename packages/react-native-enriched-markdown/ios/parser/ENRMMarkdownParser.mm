@@ -23,6 +23,7 @@ extern MarkdownASTNode *parseMarkdownWithCppParser(NSString *markdown, ENRMMd4cF
     _hardSoftBreaks = NO;
     _preserveBlankLines = NO;
     _preserveWindowsPaths = NO;
+    _cjkFriendly = NO;
     _admonitions = YES;
   }
   return self;
@@ -45,6 +46,7 @@ extern MarkdownASTNode *parseMarkdownWithCppParser(NSString *markdown, ENRMMd4cF
   copy.hardSoftBreaks = self.hardSoftBreaks;
   copy.preserveBlankLines = self.preserveBlankLines;
   copy.preserveWindowsPaths = self.preserveWindowsPaths;
+  copy.cjkFriendly = self.cjkFriendly;
   copy.admonitions = self.admonitions;
   return copy;
 }

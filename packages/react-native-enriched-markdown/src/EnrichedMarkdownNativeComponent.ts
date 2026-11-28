@@ -463,6 +463,7 @@ export interface Md4cFlagsInternal {
    */
   preserveBlankLines: boolean;
   preserveWindowsPaths: boolean;
+  cjkFriendly: boolean;
   /**
    * Enable GitHub-style admonitions/alerts extension.
    * Forced off for `flavor="commonmark"`.

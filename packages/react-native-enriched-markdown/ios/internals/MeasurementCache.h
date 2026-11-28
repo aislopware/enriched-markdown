@@ -52,6 +52,7 @@ struct MeasurementCacheKey {
   bool md4cFlagsHardSoftBreaks;
   bool md4cFlagsPreserveBlankLines;
   bool md4cFlagsPreserveWindowsPaths;
+  bool md4cFlagsCjkFriendly;
   bool md4cFlagsAdmonitions;
   size_t styleFingerprint;
   size_t linkPillContentFingerprint;
@@ -73,17 +74,19 @@ struct MeasurementCacheKey {
     return std::tie(markdown, maxWidth, allowTrailingMargin, allowFontScaling, maxFontSizeMultiplier,
                     md4cFlagsUnderline, md4cFlagsSuperscript, md4cFlagsSubscript, md4cFlagsStrikethrough,
                     md4cFlagsHighlight, md4cFlagsLatexMath, md4cFlagsHardSoftBreaks, md4cFlagsPreserveBlankLines,
-                    md4cFlagsPreserveWindowsPaths, md4cFlagsAdmonitions, styleFingerprint, linkPillContentFingerprint,
-                    imageSourcesFingerprint, wrappedCodeBlocksFingerprint, fontScale, flavor, lineBreakStrategyIOS,
-                    writingDirection, numberOfLines, ellipsizeMode, linkRegexKey, inlineCodeLinkRegexKey) ==
+                    md4cFlagsPreserveWindowsPaths, md4cFlagsCjkFriendly, md4cFlagsAdmonitions, styleFingerprint,
+                    linkPillContentFingerprint, imageSourcesFingerprint, wrappedCodeBlocksFingerprint, fontScale,
+                    flavor, lineBreakStrategyIOS, writingDirection, numberOfLines, ellipsizeMode, linkRegexKey,
+                    inlineCodeLinkRegexKey) ==
            std::tie(other.markdown, other.maxWidth, other.allowTrailingMargin, other.allowFontScaling,
                     other.maxFontSizeMultiplier, other.md4cFlagsUnderline, other.md4cFlagsSuperscript,
                     other.md4cFlagsSubscript, other.md4cFlagsStrikethrough, other.md4cFlagsHighlight,
                     other.md4cFlagsLatexMath, other.md4cFlagsHardSoftBreaks, other.md4cFlagsPreserveBlankLines,
-                    other.md4cFlagsPreserveWindowsPaths, other.md4cFlagsAdmonitions, other.styleFingerprint,
-                    other.linkPillContentFingerprint, other.imageSourcesFingerprint, other.wrappedCodeBlocksFingerprint,
-                    other.fontScale, other.flavor, other.lineBreakStrategyIOS, other.writingDirection,
-                    other.numberOfLines, other.ellipsizeMode, other.linkRegexKey, other.inlineCodeLinkRegexKey);
+                    other.md4cFlagsPreserveWindowsPaths, other.md4cFlagsCjkFriendly, other.md4cFlagsAdmonitions,
+                    other.styleFingerprint, other.linkPillContentFingerprint, other.imageSourcesFingerprint,
+                    other.wrappedCodeBlocksFingerprint, other.fontScale, other.flavor, other.lineBreakStrategyIOS,
+                    other.writingDirection, other.numberOfLines, other.ellipsizeMode, other.linkRegexKey,
+                    other.inlineCodeLinkRegexKey);
   }
 };
 
@@ -105,6 +108,7 @@ struct MeasurementCacheKeyHash {
     HashUtils::hash_one(h, key.md4cFlagsHardSoftBreaks);
     HashUtils::hash_one(h, key.md4cFlagsPreserveBlankLines);
     HashUtils::hash_one(h, key.md4cFlagsPreserveWindowsPaths);
+    HashUtils::hash_one(h, key.md4cFlagsCjkFriendly);
     HashUtils::hash_one(h, key.md4cFlagsAdmonitions);
     HashUtils::hash_one(h, key.styleFingerprint);
     HashUtils::hash_one(h, key.linkPillContentFingerprint);
@@ -264,6 +268,7 @@ inline MeasurementCacheKey buildMeasurementCacheKey(const PropsType &props, CGFl
       .md4cFlagsHardSoftBreaks = props.md4cFlags.hardSoftBreaks,
       .md4cFlagsPreserveBlankLines = props.md4cFlags.preserveBlankLines,
       .md4cFlagsPreserveWindowsPaths = props.md4cFlags.preserveWindowsPaths,
+      .md4cFlagsCjkFriendly = props.md4cFlags.cjkFriendly,
       .md4cFlagsAdmonitions = props.md4cFlags.admonitions,
       .styleFingerprint = computeStyleFingerprint(props.markdownStyle),
       .linkPillContentFingerprint = computeLinkPillContentFingerprint(props.linkPillContent),

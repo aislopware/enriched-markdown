@@ -38,6 +38,7 @@ Markdown::Md4cFlags allEnabled() {
   flags.preserveBlankLines = true;
   flags.admonitions = true;
   flags.preserveWindowsPaths = true;
+  flags.cjkFriendly = true;
   return flags;
 }
 

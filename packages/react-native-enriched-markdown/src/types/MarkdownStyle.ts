@@ -511,6 +511,14 @@ export interface Md4cFlags {
    */
   preserveWindowsPaths?: boolean;
   /**
+   * Let `*`, `_` and `~~` open and close next to CJK punctuation, as the
+   * [markdown-cjk-friendly](https://github.com/tats-u/markdown-cjk-friendly)
+   * specification describes, so `**「重要」**です` renders bold. Off by
+   * default; CommonMark leaves such delimiters literal.
+   * @default false
+   */
+  cjkFriendly?: boolean;
+  /**
    * Enable GitHub-style admonitions/alerts (`> [!NOTE]`, `> [!TIP]`,
    * `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`).
    * When enabled, such blockquotes render as themed callouts with an icon +

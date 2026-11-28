@@ -38,7 +38,7 @@ extern "C" {
 
 EMCParseResult *em_parse_markdown(const char *markdown, int underline, int latexMath, int superscript, int subscript,
                                   int highlight, int hardSoftBreaks, int permissiveAutolinks, int preserveBlankLines,
-                                  int preserveWindowsPaths, int admonitions) {
+                                  int preserveWindowsPaths, int cjkFriendly, int admonitions) {
   auto *result = new (std::nothrow) EMCParseResult();
   if (!result) {
     return nullptr;
@@ -54,6 +54,7 @@ EMCParseResult *em_parse_markdown(const char *markdown, int underline, int latex
   flags.permissiveAutolinks = permissiveAutolinks != 0;
   flags.preserveBlankLines = preserveBlankLines != 0;
   flags.preserveWindowsPaths = preserveWindowsPaths != 0;
+  flags.cjkFriendly = cjkFriendly != 0;
   flags.admonitions = admonitions != 0;
 
   Markdown::MD4CParser parser;

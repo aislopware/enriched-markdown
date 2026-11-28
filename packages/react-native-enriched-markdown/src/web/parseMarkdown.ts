@@ -13,7 +13,8 @@ type ParseFn = (
   preserveBlankLines: number,
   admonitions: number,
   permissiveAutolinks: number,
-  preserveWindowsPaths: number
+  preserveWindowsPaths: number,
+  cjkFriendly: number
 ) => string;
 
 /**
@@ -157,6 +158,7 @@ function runParser(
     hardSoftBreaks = false,
     preserveBlankLines = false,
     preserveWindowsPaths = false,
+    cjkFriendly = false,
     admonitions = true,
     permissiveAutolinks = true,
   }: WebMd4cFlags
@@ -173,7 +175,8 @@ function runParser(
       preserveBlankLines ? 1 : 0,
       admonitions ? 1 : 0,
       permissiveAutolinks ? 1 : 0,
-      preserveWindowsPaths ? 1 : 0
+      preserveWindowsPaths ? 1 : 0,
+      cjkFriendly ? 1 : 0
     )
   );
 

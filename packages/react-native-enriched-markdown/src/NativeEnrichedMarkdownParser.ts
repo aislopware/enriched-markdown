@@ -11,6 +11,7 @@ export interface NativeMd4cFlags {
   hardSoftBreaks: boolean;
   preserveBlankLines: boolean;
   preserveWindowsPaths: boolean;
+  cjkFriendly: boolean;
   admonitions: boolean;
 }
 

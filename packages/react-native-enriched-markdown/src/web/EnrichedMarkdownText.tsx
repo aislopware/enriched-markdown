@@ -94,6 +94,7 @@ export const EnrichedMarkdownText = ({
     hardSoftBreaks = false,
     preserveBlankLines = false,
     preserveWindowsPaths = false,
+    cjkFriendly = false,
     admonitions = true,
   } = md4cFlags;
 
@@ -140,6 +141,7 @@ export const EnrichedMarkdownText = ({
         hardSoftBreaks,
         preserveBlankLines,
         preserveWindowsPaths,
+        cjkFriendly,
         admonitions,
       });
       indexTaskItems(result);
@@ -165,6 +167,7 @@ export const EnrichedMarkdownText = ({
     hardSoftBreaks,
     preserveBlankLines,
     preserveWindowsPaths,
+    cjkFriendly,
     admonitions,
     textLinkKey,
     inlineCodeLinkKey,

@@ -19,13 +19,15 @@ struct Md4cFlags {
   bool admonitions = true;
   // Keeps the backslash in prose such as `C:\Users\me\.config`, where CommonMark reads `\.` as an escape.
   bool preserveWindowsPaths = false;
+  // Emphasis and strikethrough flank as markdown-cjk-friendly specifies, so `**「重要」**です` is strong.
+  bool cjkFriendly = false;
 
   bool operator==(const Md4cFlags &other) const {
     return underline == other.underline && latexMath == other.latexMath && superscript == other.superscript &&
            subscript == other.subscript && strikethrough == other.strikethrough && highlight == other.highlight &&
            permissiveAutolinks == other.permissiveAutolinks && hardSoftBreaks == other.hardSoftBreaks &&
            preserveBlankLines == other.preserveBlankLines && admonitions == other.admonitions &&
-           preserveWindowsPaths == other.preserveWindowsPaths;
+           preserveWindowsPaths == other.preserveWindowsPaths && cjkFriendly == other.cjkFriendly;
   }
 };
 

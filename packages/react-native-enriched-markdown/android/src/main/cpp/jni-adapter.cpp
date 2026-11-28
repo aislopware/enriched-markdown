@@ -426,6 +426,7 @@ static Md4cFlags md4cFlagsFromJava(JNIEnv *env, jobject flags) {
       {&Md4cFlags::hardSoftBreaks, "hardSoftBreaks"},
       {&Md4cFlags::preserveBlankLines, "preserveBlankLines"},
       {&Md4cFlags::preserveWindowsPaths, "preserveWindowsPaths"},
+      {&Md4cFlags::cjkFriendly, "cjkFriendly"},
       {&Md4cFlags::admonitions, "admonitions"},
   };
   constexpr size_t kFieldCount = sizeof(kFields) / sizeof(kFields[0]);

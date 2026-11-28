@@ -25,16 +25,17 @@ const BUNDLE = join(
 const FIXTURES = join(REPO_ROOT, 'packages/core/cpp/tests/fixtures');
 const GOLDEN = join(REPO_ROOT, 'packages/core/cpp/tests/golden/ast.txt');
 
-// parseMarkdown() in md4c_wasm.cpp exposes ten of the parser's flags; isGFM
+// parseMarkdown() in md4c_wasm.cpp exposes eleven of the parser's flags; isGFM
 // keeps its default (true). That reaches the golden dump's three -gfm
 // variants - the two -commonmark ones turn isGFM off, so they cannot be
 // reproduced through this entry point.
 const VARIANTS = {
   // underline, latexMath, superscript, subscript, highlight, hardSoftBreaks,
-  // preserveBlankLines, admonitions, permissiveAutolinks, preserveWindowsPaths
-  'defaults-gfm': [0, 1, 0, 0, 0, 0, 0, 1, 1, 0],
-  'extensions-off-gfm': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  'extensions-on-gfm': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  // preserveBlankLines, admonitions, permissiveAutolinks, preserveWindowsPaths,
+  // cjkFriendly
+  'defaults-gfm': [0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0],
+  'extensions-off-gfm': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  'extensions-on-gfm': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
 };
 
 function readGolden() {
@@ -91,7 +92,7 @@ const module = await import(pathToFileURL(BUNDLE).href);
 const instance = await module.default();
 const parse = instance.cwrap('parseMarkdown', 'string', [
   'string',
-  ...Array(10).fill('number'),
+  ...Array(11).fill('number'),
 ]);
 
 console.log('==> Comparing its AST against the golden dump');

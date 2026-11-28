@@ -70,6 +70,26 @@ it('forwards md4cFlags.preserveWindowsPaths to native when enabled', () => {
   expect(nativeView.props.md4cFlags.preserveWindowsPaths).toBe(true);
 });
 
+it('defaults md4cFlags.cjkFriendly to false on the native prop', () => {
+  const nativeView = renderNative(
+    <EnrichedMarkdownText markdown="**「重要」**です" flavor="github" />
+  );
+
+  expect(nativeView.props.md4cFlags.cjkFriendly).toBe(false);
+});
+
+it('forwards md4cFlags.cjkFriendly to native when enabled', () => {
+  const nativeView = renderNative(
+    <EnrichedMarkdownText
+      markdown="**「重要」**です"
+      flavor="github"
+      md4cFlags={{ cjkFriendly: true }}
+    />
+  );
+
+  expect(nativeView.props.md4cFlags.cjkFriendly).toBe(true);
+});
+
 it('disables GFM extensions for the commonmark flavor', () => {
   const nativeView = renderNative(
     <EnrichedMarkdownText

@@ -411,6 +411,7 @@ typedef struct ENRMRKD_BLOCK_BLANK_DETAIL {
 #define ENRMRKD_FLAG_HIGHLIGHT                   0x200000 /* Enable ==highlight== spans. */
 #define ENRMRKD_FLAG_PRESERVEBLANKLINES          0x400000 /* Report blank line runs as ENRMRKD_BLOCK_BLANK. */
 #define ENRMRKD_FLAG_INSERT                      0x800000 /* Enable insert extension. */
+#define ENRMRKD_FLAG_CJKFRIENDLY                 0x1000000 /* Emphasis and strikethrough flanking per markdown-cjk-friendly. */
 #define ENRMRKD_FLAG_ESCAPEDTEXT                 0x2000000 /* Report backslash-escaped characters as ENRMRKD_TEXT_ESCAPED. */
 
 #define ENRMRKD_FLAG_PERMISSIVEAUTOLINKS         (ENRMRKD_FLAG_PERMISSIVEEMAILAUTOLINKS | ENRMRKD_FLAG_PERMISSIVEURLAUTOLINKS | ENRMRKD_FLAG_PERMISSIVEWWWAUTOLINKS)

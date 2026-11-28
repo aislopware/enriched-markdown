@@ -166,6 +166,7 @@ fun parseMd4cFlags(flags: ReadableMap?): Md4cFlags =
     hardSoftBreaks = flags.getBooleanOrDefault("hardSoftBreaks", false),
     preserveBlankLines = flags.getBooleanOrDefault("preserveBlankLines", false),
     preserveWindowsPaths = flags.getBooleanOrDefault("preserveWindowsPaths", false),
+    cjkFriendly = flags.getBooleanOrDefault("cjkFriendly", false),
     admonitions = flags.getBooleanOrDefault("admonitions", true),
   )
 
